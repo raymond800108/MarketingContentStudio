@@ -59,11 +59,11 @@ export const PRICE_TABLE: Record<
   ApiAction,
   { service: ApiService; model: string; costUsd: number }
 > = {
-  "image-generate":      { service: "kie",     model: "nano-banana-2", costUsd: 0.20 },
-  "video-generate":      { service: "kie",     model: "kling-3.0",    costUsd: 0.40 },  // default fallback; UGC page overrides with per-model cost
-  "product-analysis":    { service: "openai",  model: "gpt-4o",       costUsd: 0.03 },
-  "caption-generate":    { service: "openai",  model: "gpt-4o",       costUsd: 0.02 },
-  "video-prompt-refine": { service: "openai",  model: "gpt-4o",       costUsd: 0.01 },
+  "image-generate":      { service: "kie",     model: "nano-banana-2", costUsd: 0.20 },   // raw $0.04 × 5
+  "video-generate":      { service: "kie",     model: "kling-3.0",    costUsd: 2.00 },   // raw $0.40 × 5; UGC overrides per-model
+  "product-analysis":    { service: "openai",  model: "gpt-4o",       costUsd: 0.15 },   // raw $0.03 × 5
+  "caption-generate":    { service: "openai",  model: "gpt-4o",       costUsd: 0.10 },   // raw $0.02 × 5
+  "video-prompt-refine": { service: "openai",  model: "gpt-4o",       costUsd: 0.05 },   // raw $0.01 × 5
   "file-upload":         { service: "kie",     model: "upload",       costUsd: 0 },
   "blotato-publish":     { service: "blotato", model: "v2",           costUsd: 0 },
   "blotato-media":       { service: "blotato", model: "v2",           costUsd: 0 },

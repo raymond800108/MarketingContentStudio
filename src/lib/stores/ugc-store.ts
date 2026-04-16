@@ -57,15 +57,14 @@ export interface CreatorOverrides {
 }
 
 /**
- * Realistic per-generation cost estimates based on Kie.ai per-second pricing.
- * Seedance: 720p with reference images × 8 sec.
- * Kling: 5 sec with reference image.
- * Used for the "$ X est." chip on the Generate button.
+ * Per-generation cost shown on the Generate button (includes ×5 profit margin).
+ * Seedance: 720p with reference images × 8 sec × 5.
+ * Kling: 5 sec with reference image × 5.
  */
 export const VIDEO_MODEL_COST_USD: Record<VideoModel, number> = {
-  "kling-3.0": 0.40,            // $0.08/sec × 5s
-  "seedance-2-fast": 0.46,      // $0.057/sec × 8s (720p with refs)
-  "seedance-2": 1.00,           // $0.125/sec × 8s (720p with refs)
+  "kling-3.0": 2.00,            // raw $0.08/sec × 5s × 5 margin
+  "seedance-2-fast": 5.85,      // raw $1.17 (234 credits) × 5 margin
+  "seedance-2": 5.00,           // raw $0.125/sec × 8s × 5 margin
 };
 
 export interface Keyframe {

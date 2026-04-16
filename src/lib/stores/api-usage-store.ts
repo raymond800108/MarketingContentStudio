@@ -117,11 +117,12 @@ const ACTION_MAP: Record<ApiAction, string> = {
   blotato_schedules: "blotato-schedules",
 };
 
+// All prices include ×5 profit margin (raw API cost × 5)
 const PRICE_TABLE: Record<string, number> = {
-  "image-generate": 0.20,
-  "video-generate": 0.40,  // default fallback; callers pass costOverride for per-model pricing
-  "product-analysis": 0.03,
-  "caption-generate": 0.02,
+  "image-generate": 0.20,   // raw $0.04 × 5
+  "video-generate": 2.00,   // raw $0.40 × 5; callers pass costOverride for per-model pricing
+  "product-analysis": 0.15,  // raw $0.03 × 5
+  "caption-generate": 0.10,  // raw $0.02 × 5
   "file-upload": 0,
   "blotato-publish": 0,
   "blotato-media": 0,
@@ -142,21 +143,23 @@ function persistToServer(entry: {
 }
 
 /**
- * Per-second cost rates for video models (from Kie.ai / PiAPI pricing).
- * The final cost = rate × duration in seconds.
+ * Per-second RAW API cost rates for video models (from Kie.ai / PiAPI pricing).
+ * calcVideoCost applies ×5 profit margin on top.
  */
+const PROFIT_MARGIN = 5;
+
 export const VIDEO_COST_PER_SEC: Record<string, { withInput: number; noInput: number }> = {
   // bytedance/seedance-2, 720p
-  "seedance-2":      { withInput: 0.125, noInput: 0.205 },
-  // bytedance/seedance-2-fast, 720p (estimated from seedance-2 480p tier)
-  "seedance-2-fast": { withInput: 0.057, noInput: 0.095 },
+  "seedance-2":      { withInput: 0.125,  noInput: 0.205 },
+  // bytedance/seedance-2-fast, 720p (234 credits = $1.17 raw per 8s generation)
+  "seedance-2-fast": { withInput: 0.146,  noInput: 0.24 },
   // kling-3.0 (image-to-video = withInput, text-to-video = noInput)
-  "kling-3.0":       { withInput: 0.08,  noInput: 0.10 },
+  "kling-3.0":       { withInput: 0.08,   noInput: 0.10 },
   // kling-2.6 fallback
-  "kling-2.6":       { withInput: 0.08,  noInput: 0.10 },
+  "kling-2.6":       { withInput: 0.08,   noInput: 0.10 },
 };
 
-/** Calculate video cost from model, duration, and whether reference images are used. */
+/** Calculate video cost (with ×5 profit margin) from model, duration, and whether reference images are used. */
 export function calcVideoCost(
   videoModel: string,
   durationSec: number,
@@ -164,7 +167,8 @@ export function calcVideoCost(
 ): number {
   const rates = VIDEO_COST_PER_SEC[videoModel] ?? VIDEO_COST_PER_SEC["kling-3.0"];
   const rate = hasImageInput ? rates.withInput : rates.noInput;
-  return Math.round(rate * durationSec * 1000) / 1000; // round to 3 decimals
+  const raw = rate * durationSec;
+  return Math.round(raw * PROFIT_MARGIN * 100) / 100; // round to 2 decimals
 }
 
 /** Helper to track an API call. Wrap your fetch with this.
