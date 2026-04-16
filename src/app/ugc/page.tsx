@@ -24,7 +24,7 @@ import {
   type ArchetypeFamily,
 } from "@/lib/ugc/archetypes";
 import { useUgcStore, type Keyframe, type VideoModel, type VoiceMode, type CreatorGender, type CreatorRace, VIDEO_MODEL_COST_USD, getActiveAngle } from "@/lib/stores/ugc-store";
-import { trackApiCall } from "@/lib/stores/api-usage-store";
+import { trackApiCall, calcVideoCost } from "@/lib/stores/api-usage-store";
 import { useGenerationStore } from "@/lib/stores/generation-store";
 import { pollManager } from "@/lib/poll-manager";
 import { useI18nStore, useT, useTMaybe } from "@/lib/i18n";
@@ -577,6 +577,14 @@ export default function UgcStudioPage() {
         };
       }
 
+      // Calculate real cost based on per-second pricing × duration
+      const actualModel = isSeedance ? videoModel : "kling-3.0";
+      const durationSec = isSeedance ? (brief.durationSec || 8) : 5;
+      const hasImageInput = isSeedance
+        ? keyframes.some((k) => k.imageUrl)
+        : !!keyframes[heroFrameIndex]?.imageUrl;
+      const videoCost = calcVideoCost(actualModel, durationSec, hasImageInput);
+
       const data = await trackApiCall("kie", "video_generation", "/api/kie", async () => {
         const r = await fetch("/api/kie", {
           method: "POST",
@@ -585,7 +593,7 @@ export default function UgcStudioPage() {
         });
         if (!r.ok) throw new Error((await r.json()).error || "kie failed");
         return r.json();
-      });
+      }, { costOverride: videoCost, model: actualModel });
       const taskId = data.taskId as string;
       setVideo({ videoTaskId: taskId });
       pollVideo(taskId);
