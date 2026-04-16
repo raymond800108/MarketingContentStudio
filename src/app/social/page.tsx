@@ -457,6 +457,9 @@ export default function SocialPage() {
     if (!effectiveAccountId) return;
     setPublishingId(post.id);
     setPublishError(null);
+    // Mark as "scheduled" BEFORE the async work starts so the auto-scheduler
+    // won't also pick up this post and double-publish it.
+    updatePost(post.id, { status: "scheduled" });
     try {
       const uploadData = await trackApiCall("blotato", "blotato_media", "/api/blotato/media", async () => {
         const uploadRes = await fetch("/api/blotato/media", {
