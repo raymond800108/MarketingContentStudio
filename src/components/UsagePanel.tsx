@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import { useT, useTMaybe } from "@/lib/i18n";
 import type { ApiAction, UsageEntry, UsageSummary } from "@/lib/usage";
-import { computePerUserSummaries, PRICE_MULTIPLIER } from "@/lib/usage";
+import { computePerUserSummaries } from "@/lib/usage";
 
 // ── Types ──
 
@@ -134,7 +134,7 @@ export default function UsagePanel({
     for (const entry of entries) {
       const key = getDateKey(new Date(entry.timestamp));
       const day = days.find((d) => d.key === key);
-      if (day) day.cost += entry.costUsd * PRICE_MULTIPLIER;
+      if (day) day.cost += entry.costUsd;
     }
     return days;
   }, [entries]);
@@ -326,7 +326,7 @@ export default function UsagePanel({
             <DollarSign className="w-3.5 h-3.5 text-amber-500" />
             <span className="text-[10px] uppercase font-semibold tracking-wider text-muted">{t("dashboard.estCost")}</span>
           </div>
-          <p className="text-2xl font-bold">${(summary.totalCostUsd * PRICE_MULTIPLIER).toFixed(2)}</p>
+          <p className="text-2xl font-bold">${summary.totalCostUsd.toFixed(2)}</p>
         </div>
         <div className="rounded-xl border border-border bg-background p-4">
           <div className="flex items-center gap-1.5 mb-1">
@@ -422,7 +422,7 @@ export default function UsagePanel({
                         </td>
                         <td className="text-right px-4 py-3 font-medium">{u.count}</td>
                         <td className="text-right px-4 py-3 text-muted">{formatTokens(tokens)}</td>
-                        <td className="text-right px-4 py-3 text-muted">${(cost * PRICE_MULTIPLIER).toFixed(2)}</td>
+                        <td className="text-right px-4 py-3 text-muted">${cost.toFixed(2)}</td>
                         <td className="text-right px-4 py-3 text-emerald-600">{u.successCalls ?? 0}</td>
                         <td className="text-right px-4 py-3 text-red-500">{u.errorCalls ?? 0}</td>
                       </tr>
@@ -434,7 +434,7 @@ export default function UsagePanel({
                       <td className="px-4 py-3 text-xs uppercase tracking-wider text-muted">Total</td>
                       <td className="text-right px-4 py-3">{summary.totalCalls}</td>
                       <td className="text-right px-4 py-3 text-muted">{formatTokens(summary.totalTokens)}</td>
-                      <td className="text-right px-4 py-3">${(summary.totalCostUsd * PRICE_MULTIPLIER).toFixed(2)}</td>
+                      <td className="text-right px-4 py-3">${summary.totalCostUsd.toFixed(2)}</td>
                       <td className="text-right px-4 py-3 text-emerald-600">{summary.successCalls}</td>
                       <td className="text-right px-4 py-3 text-red-500">{summary.errorCalls}</td>
                     </tr>
@@ -488,7 +488,7 @@ export default function UsagePanel({
                   <span className="text-[10px] uppercase font-semibold tracking-wider text-muted">{svc}</span>
                 </div>
                 <p className="text-lg font-bold">{data?.calls ?? 0} <span className="text-xs font-normal text-muted">{t("dashboard.calls")}</span></p>
-                <p className="text-xs text-muted">${(svcCost * PRICE_MULTIPLIER).toFixed(2)}</p>
+                <p className="text-xs text-muted">${svcCost.toFixed(2)}</p>
               </div>
             );
           })}
@@ -518,7 +518,7 @@ export default function UsagePanel({
                   {data.calls} {t("dashboard.calls")}
                 </span>
                 <span className="text-xs text-muted shrink-0 w-14 text-right">
-                  ${(data.costUsd * PRICE_MULTIPLIER).toFixed(2)}
+                  ${data.costUsd.toFixed(2)}
                 </span>
               </div>
             );
@@ -562,7 +562,7 @@ export default function UsagePanel({
                 </span>
               )}
               {/* Cost */}
-              <span className="text-muted shrink-0">${(entry.costUsd * PRICE_MULTIPLIER).toFixed(2)}</span>
+              <span className="text-muted shrink-0">${entry.costUsd.toFixed(2)}</span>
               {/* Duration */}
               <span className="text-muted shrink-0">{entry.durationMs}ms</span>
               {/* Relative time */}
