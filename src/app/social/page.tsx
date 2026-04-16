@@ -25,10 +25,17 @@ import {
   GripVertical,
   Edit3,
   Sparkles,
+  Timer,
+  Radio,
+  Eye,
+  Play,
+  ZoomIn,
+  Search,
 } from "lucide-react";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useT, useI18nStore } from "@/lib/i18n";
 import { trackApiCall } from "@/lib/stores/api-usage-store";
+import { useAuth } from "@/lib/useAuth";
 
 // ── Constants ──
 
@@ -48,6 +55,16 @@ const MONTHS = [
   "July","August","September","October","November","December",
 ];
 const DAY_LABELS = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+
+// ── Named account bundles ──
+// Maps a human-friendly brand name to a Blotato accountId. The user switches
+// the active bundle via the buttons in the header; the selected accountId is
+// then used as the default for all new posts.
+const ACCOUNT_BUNDLES: Array<{ id: string; label: string }> = [
+  { id: "40541", label: "Socialfashionizing" },
+  { id: "41396", label: "innery.lab" },
+  { id: "41768", label: "necksy_de" },
+];
 
 const MIN_YEAR = 2026;
 const MAX_YEAR = 2030;
@@ -117,30 +134,6 @@ function formatTime12(time24: string | undefined): string {
   return `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
 }
 
-function toISOWithTimezone(date: string, time: string, timezone: string): string {
-  // Build a Date in the given timezone, then return ISO string
-  const dateTimeStr = `${date}T${time}:00`;
-  try {
-    // Use the timezone to compute the correct UTC offset
-    const localDate = new Date(dateTimeStr);
-    const formatter = new Intl.DateTimeFormat("en-US", {
-      timeZone: timezone,
-      year: "numeric", month: "2-digit", day: "2-digit",
-      hour: "2-digit", minute: "2-digit", second: "2-digit",
-      hour12: false,
-    });
-    // Find the offset by comparing the formatted time in the target TZ
-    const parts = formatter.formatToParts(localDate);
-    const get = (type: string) => parts.find((p) => p.type === type)?.value || "0";
-    const tzDate = new Date(`${get("year")}-${get("month")}-${get("day")}T${get("hour")}:${get("minute")}:${get("second")}`);
-    const offset = tzDate.getTime() - localDate.getTime();
-    const utc = new Date(localDate.getTime() - offset);
-    return utc.toISOString();
-  } catch {
-    return new Date(dateTimeStr + "Z").toISOString();
-  }
-}
-
 // ── Drag payload types ──
 
 interface DragContentPayload {
@@ -161,14 +154,27 @@ type DragPayload = DragContentPayload | DragMovePayload;
 export default function SocialPage() {
   const t = useT();
   const locale = useI18nStore((s) => s.locale);
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
+  const boundAccountId = user?.blotatoAccountId ?? null;
+  const boundAccountLabel = user?.blotatoAccountLabel ?? null;
   const profileId = useProfileStore((s) => s.activeProfileId);
   const profile = profileId ? getProfile(profileId) : null;
   const history = useGenerationStore((s) => s.history);
 
   const {
-    apiKey, connected, accounts,
-    setApiKey, setConnected, setAccounts, disconnect,
+    apiKey, connected, accounts, defaultAccountId,
+    setApiKey, setConnected, setAccounts, setDefaultAccountId, disconnect,
   } = useBlotatoStore();
+
+  // If the logged-in user is bound to a specific Blotato accountId (e.g.
+  // innery.lab), lock the default to that account so every post they publish
+  // goes to it — regardless of what the store had cached from a previous session.
+  useEffect(() => {
+    if (boundAccountId && defaultAccountId !== boundAccountId) {
+      setDefaultAccountId(boundAccountId);
+    }
+  }, [boundAccountId, defaultAccountId, setDefaultAccountId]);
   const {
     posts: calendarPosts, addPost, updatePost, removePost, movePost,
   } = useCalendarStore();
@@ -200,9 +206,36 @@ export default function SocialPage() {
   const [publishingId, setPublishingId] = useState<string | null>(null);
   const [publishError, setPublishError] = useState<string | null>(null);
 
+  // ── Blotato diagnostic panel ──
+  // Paste a postSubmissionId and get Blotato's raw response for it, so you
+  // can see exactly why a post is stuck in QUEUED on their side.
+  const [diagnoseId, setDiagnoseId] = useState("");
+  const [diagnoseLoading, setDiagnoseLoading] = useState(false);
+  const [diagnoseResult, setDiagnoseResult] = useState<{
+    ok: boolean;
+    httpStatus: number;
+    body: unknown;
+  } | null>(null);
+
+  // ── Preview lightbox ──
+  const [previewItem, setPreviewItem] = useState<HistoryItem | null>(null);
+
   // ── Drag state ──
   const dragPayloadRef = useRef<DragPayload | null>(null);
   const [dragOverDate, setDragOverDate] = useState<string | null>(null);
+
+  // ── Live clock (client-only to avoid hydration mismatch) ──
+  const [now, setNow] = useState<Date | null>(null);
+  useEffect(() => {
+    setNow(new Date());
+    const tick = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(tick);
+  }, []);
+
+  const pendingScheduled = useMemo(
+    () => calendarPosts.filter((p) => p.status === "draft").length,
+    [calendarPosts]
+  );
 
   const blotatoHeaders = useCallback(() => {
     return { "x-blotato-key": apiKey, "Content-Type": "application/json" };
@@ -305,18 +338,25 @@ export default function SocialPage() {
         time: "12:00",
         timezone: defaultTimezone,
         mediaUrl: historyItem.resultUrl,
-        mediaType: historyItem.mode,
+        mediaType: historyItem.mode === "audio" ? "video" : historyItem.mode,
+        sourceImageUrl: historyItem.sourceUrl || undefined,
+        prompt: historyItem.prompt || undefined,
         caption: "",
         presetId,
         presetLabel,
         platform,
-        accountId: null,
+        accountId: defaultAccountId || null,
         status: "draft",
         blotatoPostId: null,
       });
       // Fire-and-forget caption generation
-      if (historyItem.mode === "image") {
-        generateCaptionFor(postId, historyItem.resultUrl, platform);
+      // For images: use the result image directly
+      // For videos: use the source image (original product photo) if available
+      const captionImageUrl = historyItem.mode === "video"
+        ? historyItem.sourceUrl || null
+        : historyItem.resultUrl;
+      if (captionImageUrl) {
+        generateCaptionFor(postId, captionImageUrl, platform, historyItem.prompt);
       }
     } else if (payload.type === "move") {
       movePost(payload.postId, dateStr);
@@ -331,13 +371,13 @@ export default function SocialPage() {
   };
 
   // ── AI caption generation ──
-  const generateCaptionFor = async (postId: string, imageUrl: string, platform: string | null) => {
+  const generateCaptionFor = async (postId: string, imageUrl: string, platform: string | null, promptContext?: string) => {
     try {
       await trackApiCall("openai", "caption_generation", "/api/analyze/caption", async () => {
         const res = await fetch("/api/analyze/caption", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ image_url: imageUrl, platform, locale }),
+          body: JSON.stringify({ image_url: imageUrl, platform, locale, prompt_context: promptContext }),
         });
         const data = await res.json();
         if (res.ok && data.caption) {
@@ -354,14 +394,32 @@ export default function SocialPage() {
     if (!editingPost) return;
     setGeneratingCaption(true);
     try {
+      const isVideo = editingPost.mediaType === "video";
+      // For images: always use the media URL
+      // For videos: use source image if available, otherwise null (API handles text-only)
+      const imageUrl = isVideo
+        ? (editingPost.sourceImageUrl || null)
+        : editingPost.mediaUrl;
+
+      // Build a prompt context for video posts — use stored prompt, or construct from available info
+      let promptContext = editingPost.prompt;
+      if (isVideo && !promptContext) {
+        const parts: string[] = ["A fashion/product video"];
+        if (editingPost.presetLabel) parts.push(`for ${editingPost.presetLabel}`);
+        if (editingPost.platform) parts.push(`on ${editingPost.platform}`);
+        promptContext = parts.join(" ");
+      }
+
       const data = await trackApiCall("openai", "caption_generation", "/api/analyze/caption", async () => {
         const res = await fetch("/api/analyze/caption", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            image_url: editingPost.mediaUrl,
+            image_url: imageUrl,
             platform: editingPost.platform,
             locale,
+            prompt_context: promptContext,
+            media_type: editingPost.mediaType,
           }),
         });
         return res.json();
@@ -395,7 +453,8 @@ export default function SocialPage() {
 
   // ── Publish a calendar post via Blotato ──
   const handlePublishPost = async (post: CalendarPost) => {
-    if (!connected || !post.accountId) return;
+    const effectiveAccountId = post.accountId || defaultAccountId;
+    if (!effectiveAccountId) return;
     setPublishingId(post.id);
     setPublishError(null);
     try {
@@ -409,21 +468,22 @@ export default function SocialPage() {
       });
       const mediaUrl = uploadData.url ? uploadData.url : post.mediaUrl;
 
-      const target: Record<string, unknown> = { targetType: post.platform || "twitter" };
+      // Let the server build the proper Blotato target (mediaType, required
+      // booleans, etc.) from platform + presetId — per Blotato's publish-post spec.
       const body: Record<string, unknown> = {
-        accountId: post.accountId,
+        accountId: effectiveAccountId,
         text: post.caption || ".",
         mediaUrls: [mediaUrl],
         platform: post.platform || "twitter",
-        target,
+        presetId: post.presetId || null,
       };
 
-      // Use time + timezone for scheduling
-      const scheduledISO = toISOWithTimezone(post.date, editTime || post.time, editTimezone || post.timezone);
-      const scheduledDate = new Date(scheduledISO);
-      if (scheduledDate > new Date()) {
-        body.scheduledTime = scheduledISO;
-      }
+      // "Publish via Blotato" uses Blotato's IMMEDIATE-publish flow: no
+      // `scheduledTime` field is sent at all. Blotato's docs show this as
+      // the "Post to a Platform Immediately" example. Only posts that are
+      // saved as drafts and later fire via the local auto-scheduler use
+      // the separate "Post at a Scheduled Time" flow (handled server-side
+      // in /api/social/auto-publish).
 
       const data = await trackApiCall("blotato", "blotato_publish", "/api/blotato/publish", async () => {
         const res = await fetch("/api/blotato/publish", {
@@ -436,15 +496,19 @@ export default function SocialPage() {
         return d;
       });
       {
+        // Blotato returns 201 when the post is queued in their worker pipeline,
+        // NOT when it's actually published to the target platform. We keep the
+        // local status as "scheduled" and let the background poller in
+        // useAutoScheduler flip it to "published" once Blotato confirms.
         updatePost(post.id, {
-          status: scheduledDate > new Date() ? "scheduled" : "published",
+          status: "scheduled",
           blotatoPostId: data.postSubmissionId || null,
           time: editTime || post.time,
           timezone: editTimezone || post.timezone,
         });
         setEditingPost((prev) =>
           prev?.id === post.id
-            ? { ...prev, status: scheduledDate > new Date() ? "scheduled" : "published", blotatoPostId: data.postSubmissionId || null }
+            ? { ...prev, status: "scheduled", blotatoPostId: data.postSubmissionId || null }
             : prev
         );
       }
@@ -452,6 +516,29 @@ export default function SocialPage() {
       setPublishError(err instanceof Error ? err.message : "Error");
     }
     setPublishingId(null);
+  };
+
+  // ── Diagnostic: fetch Blotato's raw status for a submission ID ──
+  const handleDiagnose = async () => {
+    const id = diagnoseId.trim();
+    if (!id) return;
+    setDiagnoseLoading(true);
+    setDiagnoseResult(null);
+    try {
+      const res = await fetch(`/api/blotato/publish?id=${encodeURIComponent(id)}`, {
+        headers: blotatoHeaders(),
+      });
+      const body = await res.json();
+      setDiagnoseResult({ ok: res.ok, httpStatus: res.status, body });
+    } catch (err) {
+      setDiagnoseResult({
+        ok: false,
+        httpStatus: 0,
+        body: { error: err instanceof Error ? err.message : "Unknown error" },
+      });
+    } finally {
+      setDiagnoseLoading(false);
+    }
   };
 
   // Check if timezone is in the common list
@@ -464,6 +551,23 @@ export default function SocialPage() {
         <div className="flex items-center gap-3">
           <Share2 className="w-6 h-6 text-accent" />
           <h1 className="text-2xl font-bold">{t("social.title")}</h1>
+          {/* Live clock + scheduler status */}
+          {now && (
+            <div className="flex items-center gap-2 ml-3 px-3 py-1.5 rounded-xl bg-card border border-border">
+              <Timer className="w-3.5 h-3.5 text-accent" />
+              <span className="text-xs font-mono font-medium tabular-nums">
+                {now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+              </span>
+              <span className="text-[10px] text-muted">{now.toLocaleDateString([], { month: "short", day: "numeric" })}</span>
+              {pendingScheduled > 0 && (
+                <span className="flex items-center gap-1 ml-1 px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[10px] font-bold">
+                  <Radio className="w-2.5 h-2.5 animate-pulse" />
+                  {pendingScheduled} {t("social.pending")}
+                </span>
+              )}
+            </div>
+          )}
+
         </div>
 
         {connected ? (
@@ -495,6 +599,175 @@ export default function SocialPage() {
         )}
       </div>
 
+      {/* ── Blotato Diagnostic Panel ── */}
+      {connected && (
+        <div className="mb-4 rounded-2xl border border-border bg-card p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Search className="w-4 h-4 text-accent" />
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-muted">
+              Diagnose Blotato Post
+            </h2>
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={diagnoseId}
+              onChange={(e) => setDiagnoseId(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleDiagnose()}
+              placeholder="Paste postSubmissionId (e.g. 7fe22b3c-dfd0-4235-930f-c563e1460b90)"
+              className="flex-1 px-3 py-2 rounded-lg border border-border bg-background text-xs font-mono focus:outline-none focus:border-accent/30"
+            />
+            <button
+              onClick={handleDiagnose}
+              disabled={diagnoseLoading || !diagnoseId.trim()}
+              className="flex items-center gap-1.5 px-4 py-2 bg-accent text-white rounded-lg text-xs font-medium hover:bg-accent-light transition-colors disabled:opacity-40"
+            >
+              {diagnoseLoading ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Search className="w-3.5 h-3.5" />
+              )}
+              Check Status
+            </button>
+          </div>
+
+          {diagnoseResult && (
+            <div className="mt-3 space-y-2">
+              {/* Headline */}
+              <div className="flex items-center gap-2 text-xs">
+                <span
+                  className={`px-2 py-0.5 rounded-full font-bold ${
+                    diagnoseResult.ok
+                      ? "bg-green-100 text-green-700"
+                      : "bg-red-100 text-red-700"
+                  }`}
+                >
+                  HTTP {diagnoseResult.httpStatus || "ERR"}
+                </span>
+                {(() => {
+                  const body = diagnoseResult.body as Record<string, unknown> | null;
+                  if (!body) return null;
+                  const status =
+                    (body.status as string) ||
+                    ((body.post as Record<string, unknown>)?.status as string) ||
+                    ((body.data as Record<string, unknown>)?.status as string) ||
+                    "unknown";
+                  const errMsg =
+                    (body.error as string) ||
+                    (body.message as string) ||
+                    ((body.post as Record<string, unknown>)?.error as string) ||
+                    null;
+                  return (
+                    <>
+                      <span className="px-2 py-0.5 rounded-full bg-muted/20 text-muted font-medium uppercase">
+                        status: {status}
+                      </span>
+                      {errMsg && (
+                        <span className="text-red-600 font-medium">
+                          ⚠ {errMsg}
+                        </span>
+                      )}
+                    </>
+                  );
+                })()}
+              </div>
+
+              {/* Full raw JSON */}
+              <pre className="max-h-80 overflow-auto rounded-lg border border-border bg-background p-3 text-[11px] font-mono leading-relaxed">
+                {JSON.stringify(diagnoseResult.body, null, 2)}
+              </pre>
+
+              {/* Helpful guidance based on common states */}
+              {(() => {
+                const body = diagnoseResult.body as Record<string, unknown> | null;
+                if (!body) return null;
+                const status = (
+                  (body.status as string) ||
+                  ((body.post as Record<string, unknown>)?.status as string) ||
+                  ""
+                ).toLowerCase();
+                const scheduledTimeRaw =
+                  (body.scheduledTime as string) ||
+                  ((body.post as Record<string, unknown>)?.scheduledTime as string) ||
+                  null;
+
+                // Critical red flag: scheduledTime has already passed but
+                // Blotato still reports the post as scheduled/queued. This
+                // means their worker isn't processing it — almost always a
+                // Blotato-side Instagram account auth issue.
+                if (scheduledTimeRaw && (status === "scheduled" || status === "queued")) {
+                  const scheduledMs = new Date(scheduledTimeRaw).getTime();
+                  const deltaMs = Date.now() - scheduledMs;
+                  if (deltaMs > 60_000) {
+                    const mins = Math.round(deltaMs / 60_000);
+                    return (
+                      <div className="rounded-lg border border-red-300 bg-red-50 p-3 space-y-1">
+                        <p className="text-[12px] font-bold text-red-700">
+                          ⚠ Stuck: {mins} min past scheduledTime but still &quot;{status}&quot;
+                        </p>
+                        <p className="text-[11px] text-red-600">
+                          Blotato&apos;s worker didn&apos;t process this post at its
+                          scheduled time. This is a Blotato-side issue — most
+                          commonly caused by:
+                        </p>
+                        <ul className="list-disc pl-4 text-[11px] text-red-600 space-y-0.5">
+                          <li>
+                            Instagram account isn&apos;t a Business/Creator account
+                            (personal accounts can&apos;t publish via the Graph API)
+                          </li>
+                          <li>
+                            Facebook Page token expired — go to Blotato dashboard →
+                            Accounts → Instagram → <b>Reconnect</b>
+                          </li>
+                          <li>
+                            Instagram Business account isn&apos;t linked to a Facebook
+                            Page with <code>instagram_content_publish</code> scope
+                          </li>
+                          <li>
+                            Blotato&apos;s worker pool is down/backlogged for your tenant
+                          </li>
+                        </ul>
+                        <p className="text-[11px] text-red-600 pt-1">
+                          Action: reconnect the Instagram account in Blotato, then
+                          contact Blotato support with this submission ID if the
+                          problem persists.
+                        </p>
+                      </div>
+                    );
+                  }
+                  return (
+                    <p className="text-[11px] text-muted italic">
+                      Waiting: post is scheduled for{" "}
+                      {new Date(scheduledTimeRaw).toLocaleString()}. Check back
+                      after that time has passed.
+                    </p>
+                  );
+                }
+
+                if (status === "queued") {
+                  return (
+                    <p className="text-[11px] text-muted italic">
+                      Still queued. Blotato&apos;s worker hasn&apos;t picked it up yet.
+                    </p>
+                  );
+                }
+                if (status.includes("fail") || status.includes("error")) {
+                  return (
+                    <p className="text-[11px] text-red-600 italic">
+                      Blotato&apos;s worker tried to publish but failed. See the error
+                      message above — common causes: invalid caption, media aspect ratio
+                      not allowed by Instagram, expired Page token, or account not
+                      linked to a Facebook Page with publish permission.
+                    </p>
+                  );
+                }
+                return null;
+              })()}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Main layout: sidebar + calendar */}
       <div className="flex gap-4" style={{ minHeight: "calc(100vh - 180px)" }}>
         {/* ── Left sidebar ── */}
@@ -508,17 +781,29 @@ export default function SocialPage() {
               <p className="text-xs text-muted text-center py-6">{t("social.emptyContent")}</p>
             ) : (
               <div className="grid grid-cols-3 gap-1.5 max-h-[320px] overflow-y-auto pr-1">
-                {history.map((item) => (
+                {history.filter((item) => item.mode !== "audio").map((item) => (
                   <div key={item.id} draggable onDragStart={(e) => handleContentDragStart(e, item)}
                     className="relative aspect-square rounded-lg overflow-hidden border border-border hover:border-accent/50 cursor-grab active:cursor-grabbing transition-all group"
-                    title="Drag onto calendar to schedule">
+                    title="Click to preview · Drag onto calendar to schedule">
                     {item.mode === "video" ? (
-                      <div className="w-full h-full bg-card/80 flex items-center justify-center"><Video className="w-4 h-4 text-muted" /></div>
+                      <div className="w-full h-full bg-card/80 flex items-center justify-center">
+                        <Video className="w-4 h-4 text-muted" />
+                      </div>
                     ) : (
-                      <img src={item.resultUrl} alt="" className="w-full h-full object-cover" crossOrigin="anonymous" />
+                      <img src={item.resultUrl} alt="" className="w-full h-full object-cover" />
                     )}
-                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
-                      <GripVertical className="w-4 h-4 text-white drop-shadow" />
+                    {/* Hover overlay with preview + drag icons */}
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center gap-1.5 opacity-0 group-hover:opacity-100">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setPreviewItem(item); }}
+                        className="p-1 rounded-full bg-white/90 hover:bg-white shadow transition-transform hover:scale-110"
+                        title="Preview"
+                      >
+                        {item.mode === "video" ? <Play className="w-3 h-3 text-black" /> : <ZoomIn className="w-3 h-3 text-black" />}
+                      </button>
+                      <span className="p-1 rounded-full bg-white/60">
+                        <GripVertical className="w-3 h-3 text-black/60" />
+                      </span>
                     </div>
                     {item.mode === "video" && (
                       <span className="absolute bottom-0.5 right-0.5 text-[8px] bg-black/50 text-white px-1 rounded">VID</span>
@@ -533,6 +818,36 @@ export default function SocialPage() {
           {/* Export Presets */}
           {profile && (
             <div className="rounded-2xl border border-border bg-card p-4">
+              {/* ── Account bundle switcher (top-left) ──
+                  • Admin: dropdown to pick any bundled accountId
+                  • Non-admin with a bound account: read-only badge
+                  • Non-admin without a bound account: nothing shown */}
+              {isAdmin ? (
+                <div className="relative mb-3 w-full">
+                  <select
+                    value={defaultAccountId}
+                    onChange={(e) => setDefaultAccountId(e.target.value)}
+                    title={`Account ID: ${defaultAccountId}`}
+                    className="appearance-none w-full pl-3 pr-8 py-2 text-xs font-medium rounded-xl border border-border bg-background text-foreground focus:outline-none focus:border-accent/30 cursor-pointer"
+                  >
+                    {ACCOUNT_BUNDLES.map((bundle) => (
+                      <option key={bundle.id} value={bundle.id}>
+                        {bundle.label}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronRight className="w-3 h-3 absolute right-2.5 top-1/2 -translate-y-1/2 text-muted pointer-events-none rotate-90" />
+                </div>
+              ) : boundAccountLabel ? (
+                <div
+                  title={`Account ID: ${boundAccountId}`}
+                  className="flex items-center gap-1.5 mb-3 w-full px-3 py-2 text-xs font-medium rounded-xl border border-border bg-background text-foreground"
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                  {boundAccountLabel}
+                </div>
+              ) : null}
+
               <h2 className="text-xs font-semibold uppercase tracking-wider text-muted mb-3 flex items-center gap-2">
                 <Globe className="w-3.5 h-3.5" /> {t("social.exportPreset")}
               </h2>
@@ -635,7 +950,7 @@ export default function SocialPage() {
                               {post.mediaType === "video" ? (
                                 <div className="w-full h-full bg-card flex items-center justify-center"><Video className="w-3 h-3 text-muted" /></div>
                               ) : (
-                                <img src={post.mediaUrl} alt="" className="w-full h-full object-cover" crossOrigin="anonymous" />
+                                <img src={post.mediaUrl} alt="" className="w-full h-full object-cover" />
                               )}
                             </div>
                             <div className="min-w-0 flex-1">
@@ -649,9 +964,12 @@ export default function SocialPage() {
                               </p>
                               <p className="text-[8px] text-muted/60 leading-tight">{formatTime12(post.time)}</p>
                             </div>
-                            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                              post.status === "published" ? "bg-green-500" : post.status === "scheduled" ? "bg-blue-500" : "bg-yellow-500"
-                            }`} />
+                            <span
+                              className={`w-2 h-2 rounded-full shrink-0 ${
+                                post.status === "published" ? "bg-green-500" : post.status === "scheduled" ? "bg-blue-500" : "bg-yellow-500"
+                              }`}
+                              title={post.status === "published" ? t("social.statusPublished") : post.status === "scheduled" ? t("social.statusScheduled") : t("social.statusDraft")}
+                            />
                             <div className="absolute right-0 top-0 hidden group-hover:flex items-center gap-0.5 bg-card border border-border rounded shadow-sm p-0.5">
                               <button onClick={() => openEdit(post)} className="p-0.5 hover:text-accent transition-colors">
                                 <Edit3 className="w-2.5 h-2.5" />
@@ -685,9 +1003,9 @@ export default function SocialPage() {
             <div className="flex gap-4">
               <div className="w-24 h-24 rounded-xl overflow-hidden border border-border shrink-0">
                 {editingPost.mediaType === "video" ? (
-                  <video src={editingPost.mediaUrl} className="w-full h-full object-cover" muted crossOrigin="anonymous" />
+                  <video src={editingPost.mediaUrl} className="w-full h-full object-cover" muted />
                 ) : (
-                  <img src={editingPost.mediaUrl} alt="" className="w-full h-full object-cover" crossOrigin="anonymous" />
+                  <img src={editingPost.mediaUrl} alt="" className="w-full h-full object-cover" />
                 )}
               </div>
               <div className="flex-1 space-y-2">
@@ -771,7 +1089,7 @@ export default function SocialPage() {
                 className="px-5 py-2 bg-primary text-white rounded-full text-sm font-medium hover:bg-primary-hover transition-colors">
                 {t("social.save")}
               </button>
-              {connected && editingPost.accountId && editingPost.status === "draft" && (
+              {(editingPost.accountId || defaultAccountId) && editingPost.status === "draft" && (
                 <button onClick={() => handlePublishPost(editingPost)} disabled={publishingId === editingPost.id}
                   className="flex items-center gap-2 px-5 py-2 bg-accent text-white rounded-full text-sm font-medium hover:bg-accent-light transition-colors disabled:opacity-40">
                   {publishingId === editingPost.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
@@ -790,6 +1108,55 @@ export default function SocialPage() {
         <div className="flex flex-col items-center justify-center py-20 text-muted">
           <Share2 className="w-12 h-12 text-muted/30 mb-3" />
           <p className="text-sm">{t("social.selectCategory")}</p>
+        </div>
+      )}
+
+      {/* ── Preview Lightbox ── */}
+      {previewItem && (
+        <div
+          className="fixed inset-0 z-[200] bg-black/80 flex items-center justify-center p-4"
+          onClick={() => setPreviewItem(null)}
+        >
+          <div
+            className="relative max-w-3xl w-full max-h-[85vh] flex flex-col items-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Close button */}
+            <button
+              onClick={() => setPreviewItem(null)}
+              className="absolute -top-10 right-0 p-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            {previewItem.mode === "video" ? (
+              <video
+                src={previewItem.resultUrl}
+                controls
+                autoPlay
+                className="max-w-full max-h-[80vh] rounded-xl shadow-2xl"
+                             />
+            ) : (
+              <img
+                src={previewItem.resultUrl}
+                alt=""
+                className="max-w-full max-h-[80vh] rounded-xl shadow-2xl object-contain"
+                             />
+            )}
+
+            {/* Info bar */}
+            <div className="mt-3 flex items-center gap-3 text-white/70 text-xs">
+              <span className="px-2 py-0.5 rounded bg-white/10 uppercase text-[10px] font-medium">
+                {previewItem.mode}
+              </span>
+              <span>{new Date(previewItem.timestamp).toLocaleDateString()}</span>
+              {previewItem.prompt && (
+                <span className="truncate max-w-xs" title={previewItem.prompt}>
+                  {previewItem.prompt.substring(0, 60)}…
+                </span>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>
