@@ -118,7 +118,7 @@ const ACTION_MAP: Record<ApiAction, string> = {
 };
 
 const PRICE_TABLE: Record<string, number> = {
-  "image-generate": 0.04,
+  "image-generate": 0.20,
   "video-generate": 0.40,  // default fallback; callers pass costOverride for per-model pricing
   "product-analysis": 0.03,
   "caption-generate": 0.02,
