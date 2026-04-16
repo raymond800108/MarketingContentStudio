@@ -100,8 +100,9 @@ export function useAutoScheduler() {
 
       console.log(`[AutoScheduler] Queued post ${post.id} with Blotato (id=${data.postSubmissionId}) at ${new Date().toLocaleTimeString()}`);
     } catch (err) {
-      // Revert to draft so user can retry manually
-      useCalendarStore.getState().updatePost(post.id, { status: "draft" });
+      // Mark as failed — do NOT revert to "draft" or the auto-scheduler
+      // will retry every 30s in an infinite loop.
+      useCalendarStore.getState().updatePost(post.id, { status: "failed" });
       console.error(`[AutoScheduler] Failed to publish post ${post.id}:`, err);
     } finally {
       publishingRef.current.delete(post.id);
@@ -174,9 +175,9 @@ export function useAutoScheduler() {
           useCalendarStore.getState().updatePost(post.id, { status: "published" });
           console.log(`[AutoScheduler] Blotato confirmed published: ${post.id} (${submissionId})`);
         } else if (isFailed) {
-          // Revert to draft so the user can retry manually.
+          // Mark as failed so user can see the error and manually retry.
           useCalendarStore.getState().updatePost(post.id, {
-            status: "draft",
+            status: "failed",
             blotatoPostId: null,
           });
           console.warn(`[AutoScheduler] Blotato reported failure for ${post.id} (${submissionId}): ${rawStatus}`);

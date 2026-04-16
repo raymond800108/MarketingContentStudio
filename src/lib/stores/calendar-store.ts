@@ -10,12 +10,14 @@ export interface CalendarPost {
   timezone: string; // IANA timezone e.g. "America/New_York"
   mediaUrl: string;
   mediaType: "image" | "video";
+  sourceImageUrl?: string; // original source image (useful for video posts to generate captions)
+  prompt?: string; // generation prompt (for context in caption generation)
   caption: string;
   presetId: string | null; // social preset used for export sizing
   presetLabel: string | null;
   platform: string | null;
   accountId: string | null;
-  status: "draft" | "scheduled" | "published";
+  status: "draft" | "scheduled" | "published" | "failed";
   blotatoPostId: string | null;
 }
 

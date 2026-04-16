@@ -969,9 +969,9 @@ export default function SocialPage() {
                             </div>
                             <span
                               className={`w-2 h-2 rounded-full shrink-0 ${
-                                post.status === "published" ? "bg-green-500" : post.status === "scheduled" ? "bg-blue-500" : "bg-yellow-500"
+                                post.status === "published" ? "bg-green-500" : post.status === "scheduled" ? "bg-blue-500" : post.status === "failed" ? "bg-red-500" : "bg-yellow-500"
                               }`}
-                              title={post.status === "published" ? t("social.statusPublished") : post.status === "scheduled" ? t("social.statusScheduled") : t("social.statusDraft")}
+                              title={post.status === "published" ? t("social.statusPublished") : post.status === "scheduled" ? t("social.statusScheduled") : post.status === "failed" ? "Failed" : t("social.statusDraft")}
                             />
                             <div className="absolute right-0 top-0 hidden group-hover:flex items-center gap-0.5 bg-card border border-border rounded shadow-sm p-0.5">
                               <button onClick={() => openEdit(post)} className="p-0.5 hover:text-accent transition-colors">
@@ -1018,8 +1018,9 @@ export default function SocialPage() {
                 <span className={`inline-block text-[10px] px-2 py-0.5 rounded-full font-medium ${
                   editingPost.status === "published" ? "bg-green-500/10 text-green-500"
                     : editingPost.status === "scheduled" ? "bg-blue-500/10 text-blue-500"
+                    : editingPost.status === "failed" ? "bg-red-500/10 text-red-500"
                     : "bg-yellow-500/10 text-yellow-600"
-                }`}>{t(`social.${editingPost.status}` as "social.draft" | "social.scheduled" | "social.published")}</span>
+                }`}>{editingPost.status === "failed" ? "Failed" : t(`social.${editingPost.status}` as "social.draft" | "social.scheduled" | "social.published")}</span>
               </div>
             </div>
 
@@ -1092,7 +1093,7 @@ export default function SocialPage() {
                 className="px-5 py-2 bg-primary text-white rounded-full text-sm font-medium hover:bg-primary-hover transition-colors">
                 {t("social.save")}
               </button>
-              {(editingPost.accountId || defaultAccountId) && editingPost.status === "draft" && (
+              {(editingPost.accountId || defaultAccountId) && (editingPost.status === "draft" || editingPost.status === "failed") && (
                 <button onClick={() => handlePublishPost(editingPost)} disabled={publishingId === editingPost.id}
                   className="flex items-center gap-2 px-5 py-2 bg-accent text-white rounded-full text-sm font-medium hover:bg-accent-light transition-colors disabled:opacity-40">
                   {publishingId === editingPost.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
