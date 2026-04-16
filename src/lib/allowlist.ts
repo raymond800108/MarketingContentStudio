@@ -21,7 +21,7 @@ const HARDCODED_ALLOWLIST: AllowlistEntryWithExtras[] = [
     email: "luisaschreyer0526@gmail.com",
     role: "member",
     credits: 100,
-    blotatoAccountId: "41396",
+    blotatoAccountId: "41782",
     blotatoAccountLabel: "innery.lab",
   },
   {

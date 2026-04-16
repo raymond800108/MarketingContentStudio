@@ -62,7 +62,7 @@ const DAY_LABELS = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
 // then used as the default for all new posts.
 const ACCOUNT_BUNDLES: Array<{ id: string; label: string }> = [
   { id: "40541", label: "Socialfashionizing" },
-  { id: "41396", label: "innery.lab" },
+  { id: "41782", label: "innery.lab" },
   { id: "41768", label: "necksy_de" },
 ];
 
