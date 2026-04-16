@@ -45,6 +45,7 @@ export default function StudioPage() {
     videoModel, setVideoModel,
     selectedTemplate, setSelectedTemplate,
     productDimension, setProductDimension,
+    bottleIngredients, setBottleIngredients,
   } = useUIStore();
 
   const generatedImages = useGenerationStore((s) => s.generatedImages);
@@ -384,17 +385,20 @@ export default function StudioPage() {
           const sizePrompt = productDimension && profile.sizeConfig
             ? profile.sizeConfig.getSizePrompt(analysis.type || "", analysis.body_placement || "", productDimension)
             : "";
+          const ingredientsContext = profile.id === "bottle" && bottleIngredients.trim()
+            ? `KEY INGREDIENTS: ${bottleIngredients.trim()}. Show these ingredients visually where appropriate (e.g. ingredient cascade, natural elements, textures). `
+            : "";
           const productContext = `The product is a ${analysis.type || "item"}: ${analysis.description || ""}. `;
           const characterDescriptor = buildCharacterDescriptor(characterGender, characterAge);
 
           if (profile.shotTypes.length > 0) {
             for (const shot of profile.shotTypes) {
-              const prompt = `${characterDescriptor}${sizePrompt}${productContext}${shot.scenePrompt} ${template!.prompt}`;
+              const prompt = `${characterDescriptor}${sizePrompt}${ingredientsContext}${productContext}${shot.scenePrompt} ${template!.prompt}`;
               const ratio = shot.aspectRatio || aspectRatio;
               await createAndPollTask(prompt, ratio, [hostedUrl], src.id, hostedUrl);
             }
           } else {
-            const prompt = `${characterDescriptor}${sizePrompt}${productContext}${template!.prompt}`;
+            const prompt = `${characterDescriptor}${sizePrompt}${ingredientsContext}${productContext}${template!.prompt}`;
             await createAndPollTask(prompt, aspectRatio, [hostedUrl], src.id, hostedUrl);
           }
         }
@@ -741,6 +745,21 @@ export default function StudioPage() {
                         onChange={(e) => setProductDimension(e.target.value)}
                         placeholder={tM(profile.sizeConfig.placeholder, profile.sizeConfig.placeholder)}
                         className="w-28 px-3 py-2 rounded-xl bg-card border border-border text-sm focus:outline-none focus:border-accent/30 transition-all placeholder:text-muted/40"
+                      />
+                    </div>
+                  )}
+
+                  {profile.id === "bottle" && (
+                    <div className="shrink-0 flex-1 min-w-[200px]">
+                      <label className="text-[11px] font-medium text-foreground/70 mb-1 block">
+                        {tM("studio.ingredients", "Ingredients")}
+                      </label>
+                      <input
+                        type="text"
+                        value={bottleIngredients}
+                        onChange={(e) => setBottleIngredients(e.target.value)}
+                        placeholder={tM("studio.ingredientsPh", "e.g. collagen, hyaluronic acid, vitamin C")}
+                        className="w-full px-3 py-2 rounded-xl bg-card border border-border text-sm focus:outline-none focus:border-accent/30 transition-all placeholder:text-muted/40"
                       />
                     </div>
                   )}

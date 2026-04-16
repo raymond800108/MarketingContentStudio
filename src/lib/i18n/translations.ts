@@ -221,6 +221,8 @@ const translations = {
   "studio.sizePlaceholder.carpet": { en: "e.g. 200\u00D7300", "zh-TW": "例：200\u00D7300", de: "z.B. 200\u00D7300" },
   "studio.sizeLabel.bottle": { en: "Bottle height (cm)", "zh-TW": "瓶身高度（cm）", de: "Flaschenh\u00f6he (cm)" },
   "studio.sizePlaceholder.bottle": { en: "e.g. 15", "zh-TW": "例：15", de: "z.B. 15" },
+  "studio.ingredients": { en: "Ingredients", "zh-TW": "成分", de: "Inhaltsstoffe" },
+  "studio.ingredientsPh": { en: "e.g. collagen, hyaluronic acid, vitamin C", "zh-TW": "例：膠原蛋白、玻尿酸、維生素C", de: "z.B. Kollagen, Hyalurons\u00e4ure, Vitamin C" },
 
   // ── Clothing Templates (Travel) ──
   "tpl.airport-departure.name": { en: "Airport Departure", "zh-TW": "機場出發", de: "Flughafen-Abflug" },

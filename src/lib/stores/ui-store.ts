@@ -8,12 +8,14 @@ interface UIStore {
   videoModel: string;
   selectedTemplate: string | null;
   productDimension: string;
+  bottleIngredients: string;
 
   setContentType: (type: "image" | "video") => void;
   setAspectRatio: (ratio: string) => void;
   setVideoModel: (model: string) => void;
   setSelectedTemplate: (id: string | null) => void;
   setProductDimension: (dim: string) => void;
+  setBottleIngredients: (ing: string) => void;
   resetUI: () => void;
 }
 
@@ -23,16 +25,19 @@ export const useUIStore = create<UIStore>((set) => ({
   videoModel: "kling-2.6",
   selectedTemplate: null,
   productDimension: "",
+  bottleIngredients: "",
 
   setContentType: (contentType) => set({ contentType }),
   setAspectRatio: (aspectRatio) => set({ aspectRatio }),
   setVideoModel: (videoModel) => set({ videoModel }),
   setSelectedTemplate: (selectedTemplate) => set({ selectedTemplate }),
   setProductDimension: (productDimension) => set({ productDimension }),
+  setBottleIngredients: (bottleIngredients) => set({ bottleIngredients }),
   resetUI: () =>
     set({
       contentType: "image",
       selectedTemplate: null,
       productDimension: "",
+      bottleIngredients: "",
     }),
 }));
