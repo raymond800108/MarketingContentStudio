@@ -112,12 +112,12 @@ export default function UgcStudioPage() {
   // product/visual-only and do not carry any audio narration — they're
   // treated as if "text-overlay" mode is permanently on.
   const isVoiceoverFamily = family === "ugc";
-  // Kling is always silent — force voiceover so TTS is always generated and
-  // shown as a separate audio player. Seedance respects the user's toggle.
+  // Kling = visual + music only. No TTS, no script, no marketing angles shown.
+  // Seedance UGC = voiceover baked in natively; respects the user's toggle.
   const effectiveVoiceMode: VoiceMode = !isVoiceoverFamily
     ? "text-overlay"
     : !isSeedance
-    ? "voiceover"
+    ? "text-overlay"   // Kling: music-only, never generate TTS
     : voiceMode;
   const activeAngle = getActiveAngle(brief);
   const spokenLine = activeAngle?.fullScript || "";
@@ -1852,12 +1852,10 @@ EXPLICITLY AVOID
                 })}
               </div>
             </Field>
-            {/* Voice mode selector only for UGC family.
-                Commercial + Cinematic videos are silent by design (no
-                narration/voiceover), so we skip this section entirely.
-                Kling videos cannot embed audio natively — voiceover plays
-                as a separate audio player; toggle is grayed out. */}
-            {isVoiceoverFamily && (
+            {/* Voice mode selector: only for Seedance UGC.
+                Kling = music-only, no voice, toggle hidden entirely.
+                Commercial/Cinematic = always text-overlay, hidden. */}
+            {isVoiceoverFamily && isSeedance && (
               <Field label={t("ugc.voice.label")}>
                 <div className="space-y-1">
                   <div className="flex gap-2">
@@ -1970,8 +1968,8 @@ EXPLICITLY AVOID
             </button>
           </div>
 
-          {/* Angle picker — 3 distinct marketing angles */}
-          {brief.angles && brief.angles.length > 0 && (
+          {/* Angle picker + script — hidden for Kling (music-only, no narration) */}
+          {brief.angles && brief.angles.length > 0 && isSeedance && (
             <div className="mb-4">
               <div className="text-xs font-medium uppercase tracking-wider text-muted mb-2">
                 {t("ugc.angle.pick")}
@@ -2399,72 +2397,84 @@ EXPLICITLY AVOID
               {videoTaskId && (
                 <div className="text-[11px] text-muted mt-2 font-mono truncate">task: {videoTaskId}</div>
               )}
-              {/* Music status — shown only for Kling (non-Seedance) */}
-              {!isSeedance && videoStatus === "ready" && musicStatus === "pending" && (
-                <div className="mt-2 flex items-center gap-2 text-xs text-muted">
-                  <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
-                  Adding soundtrack…
-                </div>
-              )}
-              {!isSeedance && musicStatus === "ready" && (
-                <div className="mt-2 flex items-center gap-2 text-xs text-green-500">
-                  <Check className="w-3.5 h-3.5 shrink-0" />
-                  Soundtrack added
-                </div>
-              )}
-              {!isSeedance && musicStatus === "error" && (
-                <div className="mt-2 text-[11px] text-muted">
-                  Soundtrack unavailable — video is ready without music.
-                </div>
-              )}
             </div>
 
             <div className="rounded-xl border border-border bg-card p-4 space-y-4">
-              {/* Voiceover OR text overlay section */}
-              {effectiveVoiceMode === "text-overlay" ? (
-                <div>
-                  <div className="text-xs font-medium uppercase tracking-wider text-muted mb-2 flex items-center gap-2">
-                    {t("ugc.voice.textOverlay")}
+              {!isSeedance ? (
+                /* Kling: music-only result — no voiceover, no script */
+                <div className="space-y-3">
+                  <div className="text-xs font-medium uppercase tracking-wider text-muted flex items-center gap-2">
+                    <Volume2 className="w-3.5 h-3.5" /> Soundtrack
                   </div>
-                  {activeAngle?.overlayTexts && activeAngle.overlayTexts.length > 0 ? (
-                    <div className="space-y-1.5">
-                      {activeAngle.overlayTexts.map((txt, i) => (
-                        <div key={i} className="px-3 py-2 bg-background rounded-lg text-sm font-semibold text-center">
-                          {txt}
-                        </div>
-                      ))}
+                  {musicStatus === "pending" && (
+                    <div className="flex items-center gap-2 text-sm text-muted">
+                      <Loader2 className="w-4 h-4 animate-spin" /> Generating background music…
                     </div>
-                  ) : (
-                    <p className="text-sm italic text-muted">{effectiveScript}</p>
                   )}
+                  {musicStatus === "ready" && (
+                    <div className="flex items-center gap-2 text-sm text-green-500">
+                      <Check className="w-4 h-4" /> Background music added to video.
+                    </div>
+                  )}
+                  {musicStatus === "idle" && videoStatus === "pending" && (
+                    <p className="text-sm text-muted">Music will be added after video renders.</p>
+                  )}
+                  {musicStatus === "error" && (
+                    <p className="text-sm text-muted">Soundtrack unavailable — video is ready without music.</p>
+                  )}
+                  <p className="text-xs text-muted pt-1 border-t border-border">
+                    Kling 3.0 generates visual-only video. Background music is added automatically via AI audio synthesis.
+                  </p>
                 </div>
               ) : (
-                <div>
-                  <div className="text-xs font-medium uppercase tracking-wider text-muted mb-2 flex items-center gap-2">
-                    <Volume2 className="w-3.5 h-3.5" /> {t("ugc.video.voiceover")}
-                  </div>
-                  {ttsUrl ? (
-                    <audio src={ttsUrl} controls className="w-full" />
-                  ) : ttsStatus === "pending" ? (
-                    <div className="flex items-center gap-2 text-sm text-muted">
-                      <Loader2 className="w-4 h-4 animate-spin" /> {t("ugc.video.ttsPending")}
+                /* Seedance: voiceover or text overlay */
+                <>
+                  {effectiveVoiceMode === "text-overlay" ? (
+                    <div>
+                      <div className="text-xs font-medium uppercase tracking-wider text-muted mb-2 flex items-center gap-2">
+                        {t("ugc.voice.textOverlay")}
+                      </div>
+                      {activeAngle?.overlayTexts && activeAngle.overlayTexts.length > 0 ? (
+                        <div className="space-y-1.5">
+                          {activeAngle.overlayTexts.map((txt, i) => (
+                            <div key={i} className="px-3 py-2 bg-background rounded-lg text-sm font-semibold text-center">
+                              {txt}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-sm italic text-muted">{effectiveScript}</p>
+                      )}
                     </div>
                   ) : (
-                    <div className="text-sm text-red-400">{ttsError || t("ugc.story.failed")}</div>
+                    <div>
+                      <div className="text-xs font-medium uppercase tracking-wider text-muted mb-2 flex items-center gap-2">
+                        <Volume2 className="w-3.5 h-3.5" /> {t("ugc.video.voiceover")}
+                      </div>
+                      {ttsUrl ? (
+                        <audio src={ttsUrl} controls className="w-full" />
+                      ) : ttsStatus === "pending" ? (
+                        <div className="flex items-center gap-2 text-sm text-muted">
+                          <Loader2 className="w-4 h-4 animate-spin" /> {t("ugc.video.ttsPending")}
+                        </div>
+                      ) : (
+                        <div className="text-sm text-red-400">{ttsError || t("ugc.story.failed")}</div>
+                      )}
+                    </div>
                   )}
-                </div>
-              )}
-              <div>
-                <div className="text-xs font-medium uppercase tracking-wider text-muted mb-2">
-                  {t("ugc.story.script")}
-                  {activeAngle?.name && <span className="ml-2 normal-case text-accent tracking-normal">· {activeAngle.name}</span>}
-                </div>
-                <p className="text-sm leading-relaxed">{effectiveScript}</p>
-              </div>
-              {videoUrl && (effectiveVoiceMode === "text-overlay" || ttsUrl) && (
-                <div className="pt-2 border-t border-border text-xs text-muted">
-                  {effectiveVoiceMode === "text-overlay" ? t("ugc.video.tipTextOverlay") : isSeedance ? t("ugc.video.tipSeedance") : t("ugc.video.tip")}
-                </div>
+                  <div>
+                    <div className="text-xs font-medium uppercase tracking-wider text-muted mb-2">
+                      {t("ugc.story.script")}
+                      {activeAngle?.name && <span className="ml-2 normal-case text-accent tracking-normal">· {activeAngle.name}</span>}
+                    </div>
+                    <p className="text-sm leading-relaxed">{effectiveScript}</p>
+                  </div>
+                  {videoUrl && (effectiveVoiceMode === "text-overlay" || ttsUrl) && (
+                    <div className="pt-2 border-t border-border text-xs text-muted">
+                      {effectiveVoiceMode === "text-overlay" ? t("ugc.video.tipTextOverlay") : t("ugc.video.tipSeedance")}
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </div>
