@@ -1859,53 +1859,34 @@ EXPLICITLY AVOID
                 as a separate audio player; toggle is grayed out. */}
             {isVoiceoverFamily && (
               <Field label={t("ugc.voice.label")}>
-                {!isSeedance ? (
-                  // Kling: voiceover is always separate, toggle is locked
-                  <div className="space-y-1">
-                    <div className="flex gap-2">
-                      <button
-                        disabled
-                        className="px-3 py-1.5 text-sm rounded-lg border bg-primary text-white border-primary opacity-40 cursor-not-allowed"
-                      >
-                        {t("ugc.voice.voiceover")}
-                      </button>
-                      <button
-                        disabled
-                        className="px-3 py-1.5 text-sm rounded-lg border border-border opacity-40 cursor-not-allowed"
-                      >
-                        {t("ugc.voice.textOverlay")}
-                      </button>
-                    </div>
-                    <div className="text-[11px] text-muted">
-                      Kling videos are silent — voiceover plays as a separate audio track alongside the video.
-                    </div>
+                <div className="space-y-1">
+                  <div className="flex gap-2">
+                    {([
+                      { id: "voiceover", key: "ugc.voice.voiceover" },
+                      { id: "text-overlay", key: "ugc.voice.textOverlay" },
+                    ] as const).map((v) => {
+                      const active = voiceMode === v.id;
+                      return (
+                        <button
+                          key={v.id}
+                          onClick={() => setVoiceMode(v.id as VoiceMode)}
+                          className={`px-3 py-1.5 text-sm rounded-lg border ${
+                            active ? "bg-primary text-white border-primary" : "border-border hover:border-border-hover"
+                          }`}
+                        >
+                          {t(v.key)}
+                        </button>
+                      );
+                    })}
                   </div>
-                ) : (
-                  <div className="space-y-1">
-                    <div className="flex gap-2">
-                      {([
-                        { id: "voiceover", key: "ugc.voice.voiceover" },
-                        { id: "text-overlay", key: "ugc.voice.textOverlay" },
-                      ] as const).map((v) => {
-                        const active = voiceMode === v.id;
-                        return (
-                          <button
-                            key={v.id}
-                            onClick={() => setVoiceMode(v.id as VoiceMode)}
-                            className={`px-3 py-1.5 text-sm rounded-lg border ${
-                              active ? "bg-primary text-white border-primary" : "border-border hover:border-border-hover"
-                            }`}
-                          >
-                            {t(v.key)}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    <div className="text-[11px] text-muted">
-                      {voiceMode === "text-overlay" ? t("ugc.voice.textOverlayHint") : t("ugc.voice.voiceoverHint")}
-                    </div>
+                  <div className="text-[11px] text-muted">
+                    {!isSeedance && voiceMode === "voiceover"
+                      ? "Kling videos are silent — voiceover plays as a separate audio track."
+                      : voiceMode === "text-overlay"
+                      ? t("ugc.voice.textOverlayHint")
+                      : t("ugc.voice.voiceoverHint")}
                   </div>
-                )}
+                </div>
               </Field>
             )}
 
