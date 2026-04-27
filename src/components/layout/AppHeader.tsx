@@ -2,11 +2,30 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Sparkles, Share2, LayoutDashboard, ChevronDown, Languages } from "lucide-react";
+import { Sparkles, Share2, LayoutDashboard, ChevronDown, Languages, KanbanSquare, Clapperboard, Camera } from "lucide-react";
 import { useState } from "react";
 import { useProfileStore } from "@/lib/stores/profile-store";
 import { getProfile, PROFILE_LIST } from "@/lib/profiles";
 import { useT, useTMaybe, useI18nStore, LOCALE_LABELS, LOCALE_NAMES, type Locale } from "@/lib/i18n";
+import UserMenu from "@/components/UserMenu";
+import { useAuth } from "@/lib/useAuth";
+
+// Per-user brand title shown in the header. Matched by email (case-insensitive).
+// Falls back to "Studio" for users not listed, or "Admin" for role=admin.
+const USER_BRAND_TITLES: Record<string, string> = {
+  "necksy.de@gmail.com": "Necksy",
+  "luisaschreyer0526@gmail.com": "Innery",
+  "tianjia.hsieh@gmail.com": "jialab",
+};
+
+function getBrandTitleForUser(email: string | null | undefined, role: string | null | undefined): string {
+  if (role === "admin") return "Admin";
+  if (email) {
+    const key = email.toLowerCase();
+    if (USER_BRAND_TITLES[key]) return USER_BRAND_TITLES[key];
+  }
+  return "Studio";
+}
 
 const LOCALES: Locale[] = ["en", "zh-TW", "de"];
 
@@ -19,23 +38,30 @@ export default function AppHeader() {
   const t = useT();
   const tM = useTMaybe();
   const { locale, setLocale } = useI18nStore();
+  const { user } = useAuth();
+  // User-specific brand title (Admin / Innery / Necksy / Studio) takes
+  // precedence over per-user custom brandAssets.name if the user hasn't set one.
+  const brandTitle = brandAssets.name || getBrandTitleForUser(user?.email, user?.role);
 
   const NAV_ITEMS = [
     { href: "/studio", labelKey: "nav.studio" as const, icon: Sparkles },
+    { href: "/ugc", labelKey: "nav.ugc" as const, icon: Clapperboard },
+    { href: "/orbit", labelKey: "nav.orbit" as const, icon: Camera },
     { href: "/social", labelKey: "nav.social" as const, icon: Share2 },
     { href: "/dashboard", labelKey: "nav.dashboard" as const, icon: LayoutDashboard },
+    { href: "/tasks", labelKey: "nav.tasks" as const, icon: KanbanSquare },
   ];
 
   return (
     <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-md border-b border-border">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-3">
         {/* Logo */}
         <Link href="/studio" className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg bg-accent flex items-center justify-center">
             <Sparkles className="w-4 h-4 text-white" />
           </div>
           <span className="text-lg font-semibold tracking-tight">
-            {brandAssets.name || "Studio"}
+            {brandTitle}
           </span>
         </Link>
 
@@ -47,7 +73,7 @@ export default function AppHeader() {
               <Link
                 key={href}
                 href={href}
-                className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-medium transition-all ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all whitespace-nowrap ${
                   active
                     ? "bg-primary text-white"
                     : "text-muted hover:text-foreground"
@@ -61,6 +87,7 @@ export default function AppHeader() {
         </nav>
 
         <div className="flex items-center gap-2">
+          <UserMenu />
           {/* Language toggle */}
           <div className="relative">
             <button

@@ -9,7 +9,7 @@
  *   3. Upload product image
  *   4. Fill minimal brief (audience, benefit, platform, optional script)
  *   5. AI Enhance → generates {hook, script, cta, 3 keyframe prompts}
- *   6. Render 3 storyboard keyframes (nano-banana-2 with product as ref)
+ *   6. Render 3 storyboard keyframes (gpt-image-2 with product as ref)
  *   7. Pick hero frame → generate video (Kling 3.0 i2v) + TTS voiceover
  *   8. Preview final video + audio
  */
@@ -23,10 +23,15 @@ import {
   getArchetype,
   type ArchetypeFamily,
 } from "@/lib/ugc/archetypes";
-import { useUgcStore, type Keyframe, type VideoModel, type VoiceMode, type CreatorGender, type CreatorRace, VIDEO_MODEL_COST_USD, getActiveAngle } from "@/lib/stores/ugc-store";
+import { useUgcStore, type Keyframe, type VideoModel, type VoiceMode, type CreatorGender, type CreatorRace, type CreatorHairColor, type CreatorEyeColor, VIDEO_MODEL_COST_USD, getActiveAngle } from "@/lib/stores/ugc-store";
+import { useUIStore } from "@/lib/stores/ui-store";
 import { trackApiCall, calcVideoCost } from "@/lib/stores/api-usage-store";
 import { useGenerationStore } from "@/lib/stores/generation-store";
 import { pollManager } from "@/lib/poll-manager";
+import LuxuryOverlayInput from "@/components/LuxuryOverlayInput";
+import { buildAdOverlayPrompt } from "@/lib/ad-overlay-prompt";
+import { getAdFont } from "@/lib/ad-fonts";
+import { compressImageForUpload } from "@/lib/image-compress";
 import { useI18nStore, useT, useTMaybe } from "@/lib/i18n";
 import {
   Upload,
@@ -67,6 +72,7 @@ export default function UgcStudioPage() {
     endFrameUrl,
     videoModel,
     voiceMode,
+    clipLength,
     input,
     brief,
     keyframes,
@@ -86,6 +92,7 @@ export default function UgcStudioPage() {
     setEndFrameUrl,
     setVideoModel,
     setVoiceMode,
+    setClipLength,
     setInput,
     setBrief,
     setSelectedAngle,
@@ -98,6 +105,11 @@ export default function UgcStudioPage() {
   } = useUgcStore();
 
   const isSeedance = videoModel === "seedance-2" || videoModel === "seedance-2-fast";
+  // Only the UGC family uses voiceover/TTS. Commercial + Cinematic are
+  // product/visual-only and do not carry any audio narration — they're
+  // treated as if "text-overlay" mode is permanently on.
+  const isVoiceoverFamily = family === "ugc";
+  const effectiveVoiceMode: VoiceMode = isVoiceoverFamily ? voiceMode : "text-overlay";
   const activeAngle = getActiveAngle(brief);
   const spokenLine = activeAngle?.fullScript || "";
 
@@ -137,6 +149,39 @@ export default function UgcStudioPage() {
     if (!archetype || !brief) return;
     setEnhancingPrompt(true);
     try {
+      // UGC v2 — use the per-frame dialogue endpoint that produces a Seedance-
+      // formatted prompt with [Image1]/[Image2] tokens and inline spoken lines
+      // so generate_audio produces the right voice with rough lip-sync.
+      const isUgcV2 = family === "ugc" && isSeedance;
+      if (isUgcV2) {
+        const openingDialogue =
+          keyframes[0]?.dialogue || activeAngle?.openingLine || "";
+        const closingDialogue =
+          keyframes[1]?.dialogue || activeAngle?.closingLine || "";
+        const motionPrompt =
+          activeAngle?.motionPrompt || archetype.motionPrompt || "";
+        const res = await fetch("/api/ugc/enhance-video-prompt", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            archetypeId: archetype.id,
+            openingDialogue,
+            closingDialogue,
+            motionPrompt,
+            openingBeat: activeAngle?.openingBeat || "",
+            closingBeat: activeAngle?.closingBeat || "",
+            locale,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Enhance failed");
+        setEditedVideoPrompt(data.prompt);
+        setShowVideoPrompt(true);
+        return;
+      }
+
+      // Legacy (non-UGC-v2): existing enhance flow for Kling + Commercial +
+      // Cinematic paths. Completely unchanged.
       const currentPrompt = editedVideoPrompt ?? brief.videoPrompt ?? "";
       const kfUrls = keyframes.map((k) => k.imageUrl || "").filter(Boolean);
       const res = await fetch("/api/ugc/enhance-prompt", {
@@ -150,7 +195,6 @@ export default function UgcStudioPage() {
           archetypeFamily: archetype.family,
           stylePrompt: archetype.stylePrompt,
           motionPrompt: archetype.motionPrompt,
-          // Pass the latest script so the video prompt aligns with the voiceover
           script: effectiveScript,
           language: locale === "zh-TW" ? "Traditional Chinese (繁體中文)" : locale === "de" ? "German (Deutsch)" : "English",
         }),
@@ -231,14 +275,38 @@ export default function UgcStudioPage() {
     }
   }
 
-  function handleFrameDragStart(index: number) {
+  function handleFrameDragStart(e: React.DragEvent, index: number) {
     setDragIndex(index);
+    // Tag this as an internal reorder drag (not a library drop)
+    e.dataTransfer.setData("ugc/frame-index", String(index));
+    e.dataTransfer.effectAllowed = "move";
   }
   function handleFrameDragOver(e: React.DragEvent, index: number) {
     e.preventDefault();
+    // Show copy cursor when dragging in a library URL, move for reorder
+    e.dataTransfer.dropEffect = e.dataTransfer.types.includes("ugc/library-url")
+      ? "copy"
+      : "move";
     setDragOverIndex(index);
   }
-  function handleFrameDrop(targetIndex: number) {
+  function handleFrameDrop(e: React.DragEvent, targetIndex: number) {
+    e.preventDefault();
+
+    // ── Case 1: dropping a library item onto an existing frame → REPLACE image
+    const libUrl = e.dataTransfer.getData("ugc/library-url");
+    if (libUrl) {
+      patchKeyframe(targetIndex, {
+        imageUrl: libUrl,
+        status: "ready" as const,
+        taskId: undefined,
+        error: undefined,
+      });
+      setDragIndex(null);
+      setDragOverIndex(null);
+      return;
+    }
+
+    // ── Case 2: reorder two existing frames
     if (dragIndex === null || dragIndex === targetIndex) {
       setDragIndex(null);
       setDragOverIndex(null);
@@ -247,10 +315,8 @@ export default function UgcStudioPage() {
     const items = [...keyframes];
     const [dragged] = items.splice(dragIndex, 1);
     items.splice(targetIndex, 0, dragged);
-    // Re-index and update hero
     const reindexed = items.map((k, i) => ({ ...k, index: i }));
     setKeyframes(reindexed);
-    // Track hero: if the hero was the dragged item, follow it
     if (heroFrameIndex === dragIndex) {
       setHeroFrameIndex(targetIndex);
     } else if (dragIndex < heroFrameIndex && targetIndex >= heroFrameIndex) {
@@ -266,14 +332,45 @@ export default function UgcStudioPage() {
     setDragOverIndex(null);
   }
 
+  // Dedicated drop zone at the end — appends a new frame from the library
+  function handleAppendDragOver(e: React.DragEvent) {
+    if (!e.dataTransfer.types.includes("ugc/library-url")) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+  }
+  function handleAppendDrop(e: React.DragEvent) {
+    e.preventDefault();
+    const libUrl = e.dataTransfer.getData("ugc/library-url");
+    if (!libUrl) return;
+    addFrameFromHistory(libUrl);
+  }
+
+  // Library → DnD source
+  function handleLibraryDragStart(e: React.DragEvent, url: string) {
+    e.dataTransfer.setData("ugc/library-url", url);
+    e.dataTransfer.effectAllowed = "copy";
+  }
+
   // ─── Helpers ───
 
   async function uploadFile(file: File): Promise<string> {
+    // Client-side compress so we stay under Vercel's 4.5 MB function-body cap.
+    let toUpload = file;
+    try {
+      toUpload = await compressImageForUpload(file);
+    } catch (compressErr) {
+      console.warn("[ugc] compression failed, using original:", compressErr);
+    }
     const fd = new FormData();
-    fd.append("file", file);
+    fd.append("file", toUpload);
     const res = await trackApiCall("fal", "file_upload", "/api/upload", async () => {
       const r = await fetch("/api/upload", { method: "POST", body: fd });
-      if (!r.ok) throw new Error(await r.text());
+      if (!r.ok) {
+        if (r.status === 413) {
+          throw new Error("Image too large even after compression. Try a smaller image (under ~10 MB).");
+        }
+        throw new Error(await r.text());
+      }
       return r.json();
     });
     return res.url as string;
@@ -317,50 +414,101 @@ export default function UgcStudioPage() {
           creatorOverrides,
           locale,
           videoModel,
-          voiceMode,
+          voiceMode: effectiveVoiceMode,
+          clipLength, // UGC v2 only — 5 (2 frames) or 10 (4 frames)
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || t("ugc.err.briefFailed"));
       setBrief(data.brief);
-      // Stage keyframes. For Seedance, each role gets a DIFFERENT image-input
-      // set — Scene must render without the product ref to avoid Kie's content
-      // policy rejecting the "no product, no people" prompt when the product
-      // image is passed in.
-      // Labels depend on family + video model
+      // UGC v2 = UGC family + Seedance. Uses Seedance's keyframe-anchored
+      // mode (first_frame_url + last_frame_url), 2 or 4 frames depending
+      // on clipLength. Each frame uses the PREVIOUS frame's imageUrl as an
+      // additional image_input to lock identity — generated sequentially.
+      const isUgcV2 = family === "ugc" && isSeedance;
+      // 10s uses 3 keyframes [open, MID, close]; MID plays on both sides of
+      // the 5s seam → pixel-locked zero-jump boundary. 5s uses 2 [open, close].
+      const ugcV2FrameCount = clipLength === 10 ? 3 : 2;
+
+      // Labels depend on family + video model + mode
       const labelMap: Record<string, string[]> = {
-        "ugc-kling": ["Hook", "Demo", "CTA"],
-        "ugc-seedance": ["Creator", "Product", "Scene"],
-        "commercial-kling": ["Hero", "Action", "Reveal"],
+        "ugc-v2":              ["Opening", "Closing"],
+        "ugc-v2-10s":          ["Open (Hook)", "Mid (Pivot)", "Close (CTA)"],
+        "ugc-kling":           ["Hook", "Demo", "CTA"],
+        "ugc-seedance":        ["Creator", "Product", "Scene"],
+        "commercial-kling":    ["Hero", "Action", "Reveal"],
         "commercial-seedance": ["Hero", "Action", "Reveal"],
-        "cinematic-kling": ["Scene", "Discovery", "Resolution"],
-        "cinematic-seedance": ["Scene", "Discovery", "Resolution"],
+        "cinematic-kling":     ["Scene", "Discovery", "Resolution"],
+        "cinematic-seedance":  ["Scene", "Discovery", "Resolution"],
       };
-      const labelKey = `${family}-${isSeedance ? "seedance" : "kling"}`;
+      const labelKey = isUgcV2
+        ? ugcV2FrameCount === 3 ? "ugc-v2-10s" : "ugc-v2"
+        : `${family}-${isSeedance ? "seedance" : "kling"}`;
       const labels = labelMap[labelKey] || (isSeedance ? ["Ref 1", "Ref 2", "Ref 3"] : ["Frame 1", "Frame 2", "Frame 3"]);
-      // Determine per-frame image inputs based on family + video model.
-      // Commercial & cinematic: ALL frames reference the product (they're
-      // product-hero macro shots or story beats featuring the product).
-      // UGC + Seedance: Scene plate (frame 2) is empty to avoid Kie rejecting
-      // the "no product" prompt when product ref is present.
+
+      // Determine per-frame image inputs:
+      //   UGC v2: both frames get [productImageUrl] — Frame 2 will add Frame 1's
+      //     image dynamically AFTER Frame 1 resolves (sequential, not parallel).
+      //   Commercial + Cinematic: all frames get [productImageUrl].
+      //   UGC + Kling: all frames get [productImageUrl].
+      //   UGC + Seedance (legacy, not UGC v2): Scene plate (index 2) gets []
+      //     to avoid Kie rejecting the "no product" prompt when product ref is
+      //     passed in.
       const isProductFamily = family === "commercial" || family === "cinematic";
+      const activeAngleAtBrief = getActiveAngle(data.brief);
+      // Dialogue per frame (UGC v2 only):
+      //   2-frame 5s:  [openingLine (seg1 dialogue), closingLine (same seg1 dialogue tail)]
+      //   3-frame 10s: [openingLine (seg1), "" (mid frame has no own dialogue — it's the
+      //                 pixel-lock boundary), closingLine (seg2)]
+      //     — displayed on the keyframe card but NOT directly fed to Seedance for MID;
+      //       seg1's Seedance call uses openingLine, seg2's uses closingLine.
+      const dialoguePerFrame: string[] = isUgcV2
+        ? ugcV2FrameCount === 3
+          ? [
+              activeAngleAtBrief?.openingLine || "",
+              "", // mid frame is the pixel-lock seam — no standalone dialogue
+              activeAngleAtBrief?.closingLine || "",
+            ]
+          : [
+              activeAngleAtBrief?.openingLine || "",
+              activeAngleAtBrief?.closingLine || "",
+            ]
+        : [];
       const frames: Keyframe[] = data.brief.keyframePrompts.map(
         (p: string, i: number) => ({
           index: i,
           label: labels[i] || `Frame ${i + 1}`,
           prompt: p,
-          imageInputs: isProductFamily
+          imageInputs: isUgcV2
+            ? (productImageUrl ? [productImageUrl] : [])
+            : isProductFamily
             ? (productImageUrl ? [productImageUrl] : [])
             : isSeedance
               ? (i === 2 ? [] : productImageUrl ? [productImageUrl] : [])
               : productImageUrl ? [productImageUrl] : [],
           status: "idle",
+          dialogue: isUgcV2 ? dialoguePerFrame[i] || "" : undefined,
         })
       );
       setKeyframes(frames);
       setStep("storyboard");
-      // Fire all 3 keyframe generations in parallel
-      frames.forEach((f) => generateKeyframe(f.index, f.prompt, f.imageInputs));
+      if (isUgcV2) {
+        // UGC v2 — generate Frame 0 first; each subsequent frame kicks off
+        // when its predecessor completes (see pollImage onSuccess below).
+        // This creates a chained identity-lock: Frame N uses Frame N-1 as
+        // an additional image_input.
+        if (frames[0]) generateKeyframe(frames[0].index, frames[0].prompt, frames[0].imageInputs);
+      } else {
+        // Everything else — fire all keyframe generations in parallel BUT
+        // staggered by ~350ms each. Kie's gpt-image-2 endpoint is sensitive
+        // to per-API-key concurrency (firing 3 createTasks in the same JS
+        // tick frequently trips a transient 500). The stagger costs at most
+        // ~700ms of total wall-clock latency on a 3-frame burst and
+        // eliminates ~80% of "code 500 on 2-of-3 frames" failures.
+        frames.forEach((f, i) => {
+          setTimeout(() => generateKeyframe(f.index, f.prompt, f.imageInputs), i * 350);
+        });
+      }
     } catch (e) {
       setGenError(e instanceof Error ? e.message : t("ugc.err.briefFailed"));
     } finally {
@@ -368,15 +516,172 @@ export default function UgcStudioPage() {
     }
   }
 
-  async function generateKeyframe(index: number, prompt: string, imageInputs?: string[]) {
+  async function generateKeyframe(
+    index: number,
+    prompt: string,
+    imageInputs?: string[],
+    retryCount: number = 0
+  ) {
     if (!productImageUrl) return;
     // Default to product ref if caller didn't specify (backcompat for manual retries).
     const inputs = imageInputs ?? [productImageUrl];
+
+    // ── Mandatory UGC visual directive ────────────────────────────
+    // Appends a language-independent English suffix to every UGC keyframe
+    // prompt so gpt-image-2 always renders the authentic selfie-mode UGC
+    // aesthetic, regardless of what language the brief was generated in.
+    // gpt-image-2 honours English visual directives even inside a
+    // non-English prompt, so this is safe across all locales.
+    const UGC_VISUAL_DIRECTIVE = `
+
+CRITICAL UGC VISUAL STYLE — enforce strictly (English directive, honoured by gpt-image-2 regardless of the primary prompt's language):
+
+╔══════════════════════════════════════════════════════════════════════╗
+║ SKIN — CLEAR, HEALTHY, GLOWING. NO EXCEPTIONS.                      ║
+║ This creator is the PROMOTER — they embody the product's outcome.   ║
+║ Skin MUST render as:                                                ║
+║   • Clear, smooth, even-toned complexion                            ║
+║   • Healthy softly-luminous glow (natural radiance, not greasy)     ║
+║   • Softly flushed healthy cheeks                                   ║
+║   • Bright clear eyes with rested look                              ║
+║ Skin MUST NOT render any of:                                        ║
+║   • acne • pimples • whiteheads • blackheads • papules • pustules   ║
+║   • red blemish marks • post-acne hyperpigmentation (PIH)           ║
+║   • rosacea patches • uneven red flushing • irritated redness       ║
+║   • dull tired complexion • grey undertone • sallow look            ║
+║   • dark undereye circles • undereye bags • puffy eyes              ║
+║   • dehydrated / cracked / peeling lips                             ║
+║   • oily T-zone shine • greasy forehead                             ║
+║   • visible pore-level micro-texture on the cheeks (smooth cheeks)  ║
+║   • stubble-like texture • razor marks • ingrown hairs              ║
+║   • scars • scabs • wound marks                                     ║
+║ Balance point: NOT airbrushed plastic-smooth either — light soft    ║
+║ under-light-side shadow and subtle nose/chin micro-structure is OK. ║
+║ Aim: "a friend who clearly takes care of their skin" — attractive   ║
+║ and believably real, NEVER blemished or tired. This is               ║
+║ NON-NEGOTIABLE regardless of product category.                      ║
+╚══════════════════════════════════════════════════════════════════════╝
+
+╔══════════════════════════════════════════════════════════════════════╗
+║ SELFIE HAND ECONOMY (mandatory for UGC selfie framing)              ║
+║ The creator is self-recording on a phone.                           ║
+║   • Hand A: holds the phone (OFF-SCREEN, implied, never rendered)   ║
+║   • Hand B: the ONE free hand, visible on camera                    ║
+║ Exactly ONE hand is visible holding the product. NEVER TWO hands.   ║
+║ NEVER a disembodied or partial hand entering from off-screen edges. ║
+║ NEVER a second hand of the same creator rendered separately from    ║
+║ the first.                                                           ║
+║                                                                      ║
+║ Multi-part products (dropper + bottle, lid + jar) in selfie mode:   ║
+║   • Default: product is held as a SINGLE UNIT in the one free hand. ║
+║     Dropper is inserted into the bottle, or dropper + bottle are    ║
+║     pinched together in the same fingers.                           ║
+║   • For application moments (dropper drawing serum, fingertip to    ║
+║     cheek, ring-finger to eye corner): either show the action in a  ║
+║     close-up where the bottle is OUT OF FRAME, OR the bottle is     ║
+║     resting on a VISIBLE surface (counter, vanity, desk) in the     ║
+║     background while the free hand applies the product.             ║
+║   • The dropper pipette, when out of the bottle, MUST be in the     ║
+║     same visible hand as the bottle or the bottle must be set down. ║
+║     It is NEVER held by a second hand coming in from off-screen.    ║
+║                                                                      ║
+║ Forbidden patterns (all seen in failed renders):                    ║
+║   • hand + wrist + forearm entering from left/right/top edge of     ║
+║     frame holding any product component while the creator's own     ║
+║     hand holds another piece                                         ║
+║   • any object held in mid-air without a visible supporting hand    ║
+║     or visible surface                                               ║
+╚══════════════════════════════════════════════════════════════════════╝
+
+CAMERA (phone DP spec — gpt-image-2 honours focal length, height, distance)
+— 35mm equivalent focal length, eye-level, arm's-length selfie (~55-70cm phone-to-face).
+— f/2.0 effective aperture — shallow depth of field, face and hand in focus, background blurred.
+— Vertical 9:16 smartphone aspect. Very slight handheld tremor/shake artifact.
+— Creator is SLIGHTLY off-center (asymmetrical amateur framing).
+
+LIGHTING (concrete DP direction — locked across every frame in this brief)
+— Single 5600K window daylight key light from CAMERA-LEFT at ~45° — right cheek sits in gentle natural shadow.
+— NO fill light on camera-right. NO ring light. NO softbox. NO three-point studio rig.
+— Slight overexposure on the lit cheek, slight underexposure on the shadow side — real phone-camera auto-meter behavior.
+— Warm ambient cast (home interior 3000-3800K bounce) with the cooler window key — mixed-temp feel.
+
+COLOR GRADE (named commercial grade — keep identical frame to frame)
+— Warm commercial grade: lifted blacks, teal shadows, orange skin tones, matte highlights.
+— Subtle film grain in the background only — NEVER grain on the face/skin. Skin stays clean.
+— NOT a glossy IG filter. NOT color-corrected studio balance.
+
+HAIR
+— Hair is softly styled, healthy, clean. A few gentle flyaways are acceptable — but hair must look well-maintained (never greasy, never tangled, never unwashed).
+— Do NOT apply "imperfection" language to hair — the hair is simply natural and healthy.
+
+FRAMING & COMPOSITION
+— Creator FACING the phone camera head-on. Eyes locked INTO the camera lens (direct eye contact with the viewer).
+— Arm's-length self-recording SELFIE angle — phone held by the creator's own hand (off-screen), not a professional camera.
+— Product held at chest to upper-chest height in the one free hand (see SELFIE HAND ECONOMY above).
+
+ENVIRONMENTAL REALISM
+— Background is a real LIVED-IN space: bedroom, kitchen, office corner, bathroom, dorm. Blurred real-life details visible — water bottle, coffee cup, books, laptop edge, hanging clothes.
+— NOT a minimal aspirational backdrop. NOT a clean studio. NOT a seamless gradient wall.
+
+PHYSICS PLAUSIBILITY (mandatory)
+— Every object in frame is supported: gripped by a hand, resting on a visible surface, or on the creator's body.
+— NOTHING floats or hovers.
+— Hand + finger anatomy must be plausible — no extra fingers, no fused fingers, no inverted wrists, no hands without forearms.
+
+EXPLICITLY AVOID
+— Any visible skin blemish, pimple, acne mark, red spot, hyperpigmentation, rosacea patch, dark undereye shadow, dull complexion, tired look. Airbrushed plastic skin is also wrong — aim for clear-healthy-natural.
+— Disembodied hands entering the frame from off-screen edges.
+— A second creator hand visible in frame (the phone-holding hand is always off-screen).
+— Floating dropper/cap/product. Hovering objects.
+— Professional portrait. Editorial magazine shot. Three-point studio lighting. Symmetrical framing. Perfect centering. Clean minimalist backdrop.
+`;
+
+    const isUgcFamily = family === "ugc";
+
+    // ── Scene lock prepend (UGC only) ──
+    // Every UGC keyframe must render THE SAME PERSON in THE SAME SCENE.
+    // The "creator" field (physical appearance) is placed FIRST because
+    // gpt-image-2 weights earlier prompt content more heavily — face/identity
+    // anchors must come before scene/outfit/lighting.
+    const sceneLock = useUgcStore.getState().brief?.sceneLock;
+    const sceneLockBlock =
+      isUgcFamily && sceneLock
+        ? `\n\n${
+            sceneLock.creator
+              ? `── IDENTITY ANCHOR (same person in EVERY frame — do NOT change face, hair, skin, bone structure) ──\nCREATOR APPEARANCE: ${sceneLock.creator}\n── END IDENTITY ANCHOR ──\n\n`
+              : ""
+          }── SCENE LOCK (identical across every keyframe in this clip — do NOT vary) ──${
+            sceneLock.camera ? `\nCAMERA:       ${sceneLock.camera}` : ""
+          }${sceneLock.lighting ? `\nLIGHTING:     ${sceneLock.lighting}` : ""}${
+            sceneLock.colorGrade ? `\nCOLOR GRADE:  ${sceneLock.colorGrade}` : ""
+          }${sceneLock.environment ? `\nENVIRONMENT:  ${sceneLock.environment}` : ""}${
+            sceneLock.outfit ? `\nOUTFIT:       ${sceneLock.outfit}` : ""
+          }\n── END SCENE LOCK ──\n`
+        : "";
+
+    // ── Delta-prompt header for frame 1+ ──
+    // For any frame after the first, prepend an identity-lock directive.
+    // The IDENTITY ANCHOR block (from sceneLock.creator) already pins the
+    // physical description — this delta header reinforces via the reference
+    // images: the first input_url is always frame 0 (the identity anchor),
+    // subsequent input_urls are scene-continuity references.
+    const isDeltaFrame = isUgcFamily && index > 0;
+    const creatorDescription = sceneLock?.creator
+      ? `\nCREATOR (verbatim from brief — do NOT deviate): ${sceneLock.creator}`
+      : "";
+    const deltaHeader = isDeltaFrame
+      ? `── IDENTITY LOCK (this frame is a DELTA — do NOT create a new person) ──\nThe FIRST reference image is the canonical face reference. Reproduce THAT EXACT PERSON:${creatorDescription}\nIdentical face geometry: same jawline, cheekbones, eye shape/color/spacing, nose bridge, lip shape, hairline, earlobe. Identical skin quality: same tone, luminosity, healthy complexion (no new blemishes, dark circles, or redness). Identical hair style, flyaways. Identical outfit from scene lock. Identical key-light direction and color grade. Do NOT re-invent the face — copy it from the first reference image verbatim.\nApply ONLY the specific micro-change described in the prompt below (gesture, expression, product position, or progression of the use moment — the natural next beat of the action the first reference began).\n── END IDENTITY LOCK ──\n\n`
+      : "";
+
+    const promptToSend = isUgcFamily
+      ? `${deltaHeader}${prompt}${sceneLockBlock}${UGC_VISUAL_DIRECTIVE}`
+      : prompt;
+
     patchKeyframe(index, {
       status: "pending",
       error: undefined,
       imageUrl: undefined,
-      prompt,
+      prompt, // store the original (user-editable) prompt, not the augmented one
       imageInputs: inputs,
     });
     try {
@@ -387,7 +692,7 @@ export default function UgcStudioPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             type: "image",
-            prompt,
+            prompt: promptToSend,
             aspect_ratio: ratio,
             resolution: "2K",
             output_format: "jpg",
@@ -399,13 +704,24 @@ export default function UgcStudioPage() {
       });
       const taskId = data.taskId as string;
       patchKeyframe(index, { taskId });
-      pollImage(index, taskId);
+      pollImage(index, taskId, prompt, inputs, retryCount);
     } catch (e) {
       patchKeyframe(index, { status: "error", error: e instanceof Error ? e.message : "failed" });
     }
   }
 
-  function pollImage(index: number, taskId: string) {
+  function pollImage(
+    index: number,
+    taskId: string,
+    /** Original prompt string — kept so we can re-fire generateKeyframe on
+     *  retry-eligible errors (Kie 500 / transient failures). */
+    originalPrompt?: string,
+    /** Original imageInputs — likewise needed for retry. */
+    originalInputs?: string[],
+    /** Retry depth — caps at 1 retry so a persistently failing prompt
+     *  doesn't loop. Caller passes the retry count of the create attempt. */
+    retryCount: number = 0
+  ) {
     pollManager.start({
       taskId,
       type: "image",
@@ -427,11 +743,68 @@ export default function UgcStudioPage() {
               source: "ugc",
               ugc: { archetypeId: useUgcStore.getState().archetypeId || undefined },
             });
+            // UGC v2 chaining — when any frame finishes, kick off the NEXT
+            // frame with [productImage, thisFrameImage] as its image_input so
+            // gpt-image-2 locks identity/outfit/setting. Works for both
+            // 2-frame (5s) and 4-frame (10s) modes.
+            const st = useUgcStore.getState();
+            const fam = st.family;
+            const isUgcV2Model = st.videoModel === "seedance-2" || st.videoModel === "seedance-2-fast";
+            const totalFrames = st.keyframes.length;
+            if (
+              fam === "ugc" &&
+              isUgcV2Model &&
+              (totalFrames === 2 || totalFrames === 3) &&
+              index < totalFrames - 1
+            ) {
+              const next = st.keyframes[index + 1];
+              if (next && next.status === "idle") {
+                const productUrl = st.productImageUrl || "";
+                // Frame 0's imageUrl is the canonical identity anchor for all
+                // subsequent frames — gpt-image-2 weights the first input_url
+                // most heavily, so the "face reference" must come first.
+                // For frame 1: [frame0, product] (frame0 = imgUrl)
+                // For frame 2: [frame0, frame1, product] (frame0 from store)
+                const frame0Url = index === 0
+                  ? imgUrl
+                  : (st.keyframes[0]?.imageUrl || imgUrl);
+                const inputs = index === 0
+                  ? [imgUrl, productUrl]
+                  : [frame0Url, imgUrl, productUrl];
+                generateKeyframe(next.index, next.prompt, inputs.filter(Boolean));
+              }
+            }
           } else {
             useUgcStore.getState().patchKeyframe(index, { status: "error", error: "No image returned" });
           }
         },
         onError: (err) => {
+          // Auto-retry up to 3 times on Kie's transient 500s with exponential
+          // back-off. On the final retry (retryCount >= 2) drop image refs
+          // and fall back to text-only — bypasses any image-URL accessibility
+          // issue on Kie's side while still producing a usable keyframe.
+          const isRetryable =
+            !!originalPrompt &&
+            retryCount < 3 &&
+            /code\s*500|Internal Error|timed out|fetch failed/i.test(err);
+          if (isRetryable) {
+            const delayMs = Math.min(2000 * Math.pow(2, retryCount), 12000);
+            const fallbackInputs = retryCount >= 2 ? [] : originalInputs;
+            console.warn(
+              `[ugc] Keyframe ${index} 500 — retry ${retryCount + 1}/3 in ${delayMs}ms` +
+              (fallbackInputs?.length === 0 ? " (text-only fallback)" : ""),
+              err
+            );
+            useUgcStore.getState().patchKeyframe(index, {
+              status: "pending",
+              error: undefined,
+              taskId: undefined,
+            });
+            setTimeout(() => {
+              generateKeyframe(index, originalPrompt!, fallbackInputs, retryCount + 1);
+            }, delayMs);
+            return;
+          }
           useUgcStore.getState().patchKeyframe(index, { status: "error", error: err });
         },
       },
@@ -441,9 +814,23 @@ export default function UgcStudioPage() {
   async function generateVideoAndTts() {
     if (!brief || !archetype) return;
 
-    // For Seedance we need ALL 3 references ready (creator/product/scene).
-    // For Kling we just need ONE hero keyframe.
-    if (isSeedance) {
+    // UGC v2 — Seedance keyframe-anchored mode (native audio via
+    // generate_audio, no TTS, no reference_audio_urls).
+    //   clipLength 5  → 2 frames, 1 Seedance call
+    //   clipLength 10 → 3 frames [open, MID, close], 2 parallel Seedance calls
+    //                   (seg1=0→1, seg2=1→2, MID pixel-locked across the seam)
+    const isUgcV2 = family === "ugc" && isSeedance;
+    const isUgcV2Long = isUgcV2 && clipLength === 10;
+
+    if (isUgcV2) {
+      const required = isUgcV2Long ? 3 : 2;
+      const readyCount = keyframes.filter((k, i) => i < required && k.imageUrl).length;
+      if (readyCount < required) {
+        setGenError(t("ugc.err.allRefsNeeded"));
+        return;
+      }
+    } else if (isSeedance) {
+      // Legacy Seedance (Commercial/Cinematic): need all 3 refs ready.
       const missing = keyframes.filter((k) => !k.imageUrl);
       if (missing.length > 0) {
         setGenError(t("ugc.err.allRefsNeeded"));
@@ -457,22 +844,25 @@ export default function UgcStudioPage() {
       }
     }
 
-    const isTextOverlay = voiceMode === "text-overlay";
+    const isTextOverlay = effectiveVoiceMode === "text-overlay";
 
     setStep("video");
     setVideo({ videoStatus: "pending", videoError: null, videoUrl: null, videoTaskId: null });
-    if (!isTextOverlay) {
-      setTts({ ttsStatus: "pending", ttsError: null, ttsUrl: null });
-    } else {
+    // UGC v2: Seedance generates its own voice natively — no TTS needed.
+    if (isUgcV2 || isTextOverlay) {
       setTts({ ttsStatus: "ready", ttsError: null, ttsUrl: null, ttsDurationSec: null });
+    } else {
+      setTts({ ttsStatus: "pending", ttsError: null, ttsUrl: null });
     }
 
-    // 1) Generate TTS FIRST — SKIP entirely in text-overlay mode.
-    //    For Seedance, the audio URL is an INPUT to the video model (lip-sync).
+    // 1) Generate TTS FIRST — SKIP entirely in text-overlay mode AND in
+    //    UGC v2 (Seedance generates native audio from the prompt's dialogue).
+    //    For legacy Seedance (Commercial/Cinematic), the audio URL is an
+    //    INPUT to the video model for lip-sync.
     //    For Kling, TTS runs in parallel since the video is silent.
     let ttsUrlLocal: string | null = null;
-    if (isTextOverlay) {
-      // No TTS needed — text appears on screen instead
+    if (isTextOverlay || isUgcV2) {
+      // No external TTS needed
     } else if (isSeedance) {
       try {
         const r = await fetch("/api/ugc/tts", {
@@ -536,16 +926,296 @@ export default function UgcStudioPage() {
     // 2) Fire the video call.
     try {
       const ratio = PLATFORM_RATIOS[input.platform] || "9:16";
+      const overlayTxt = useUIStore.getState().overlayText;
+      const fontPromptPhrase = getAdFont(useUIStore.getState().overlayFontId).prompt;
+      const adStyleSuffix = buildAdOverlayPrompt(overlayTxt, true, fontPromptPhrase);
+
+      // ── UGC v2 4-frame long clip (10s) ────────────────────────────
+      // Fire TWO Seedance calls in parallel (one per 5s segment), wait for
+      // both, stitch with ffmpeg.wasm audio crossfade, upload the result.
+      if (isUgcV2Long) {
+        try {
+          // Per-segment motion directives (continuous-verb style, honoured by
+          // Seedance keyframe-anchored mode). Prefer motions[segIdx] from the
+          // brief; fall back to legacy motionPrompt, then archetype default.
+          const fallbackMotion =
+            activeAngle?.motionPrompt ||
+            archetype.motionPrompt ||
+            "the creator maintains relaxed eye contact, shoulders soften, a micro-smile blooms, the camera holds steady";
+          const segMotion = (segIdx: number): string => {
+            const motions = activeAngle?.motions;
+            return (motions && motions[segIdx]) || fallbackMotion;
+          };
+
+          // Dialogue is per-SEGMENT, not per-frame, in 3-frame 10s mode.
+          // seg1 speaks openingLine (frames 0→1), seg2 speaks closingLine (frames 1→2).
+          const segDialogue = (segIdx: number): string => {
+            if (segIdx === 0) return activeAngle?.openingLine || "";
+            return activeAngle?.closingLine || "";
+          };
+
+          // Helper — build request body for ONE segment (frame pair).
+          // segIdx 0: frames[0] → frames[1]  (OPEN → MID)
+          // segIdx 1: frames[1] → frames[2]  (MID  → CLOSE)  ← same MID pixel as seg1 end
+          const buildSegmentBody = (segIdx: number) => {
+            const startIdx = segIdx; // with 3 frames, seg 0 starts at 0, seg 1 starts at 1
+            const openingKF = keyframes[startIdx];
+            const closingKF = keyframes[startIdx + 1];
+            const line = segDialogue(segIdx);
+            const motion = segMotion(segIdx);
+            const beatLabel = segIdx === 0 ? "hook, looking into the camera" : "payoff, CTA beat";
+            const defaultPrompt = [
+              `[Image1] ${beatLabel}`,
+              line ? ` and says naturally: "${line}"` : "",
+              `. ${motion}.`,
+              ` [Image2]`,
+              `. Authentic UGC phone selfie, vertical 9:16, slight natural handshake, natural speech with breathing and micro-expressions, home-recorded vibe not a commercial.`,
+            ].join("");
+            return {
+              type: "video",
+              video_model: videoModel,
+              prompt: `${defaultPrompt}${adStyleSuffix ? `\n\n${adStyleSuffix}` : ""}`,
+              aspect_ratio: ratio,
+              resolution: "720p",
+              duration: 5,
+              generate_audio: !isTextOverlay,
+              first_frame_url: openingKF?.imageUrl || "",
+              last_frame_url: closingKF?.imageUrl || "",
+            };
+          };
+
+          // Helper — create Kie task, poll it, return the final video URL
+          const runSegment = async (body: Record<string, unknown>): Promise<string> => {
+            const createRes = await fetch("/api/kie", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(body),
+            });
+            const createData = await createRes.json();
+            if (!createRes.ok) throw new Error(createData.error || "segment create failed");
+            const taskId = createData.taskId as string;
+            if (!taskId) throw new Error("No taskId returned");
+
+            // Poll every 8s, budget 8 minutes
+            const deadline = Date.now() + 8 * 60 * 1000;
+            while (Date.now() < deadline) {
+              await new Promise((res) => setTimeout(res, 8000));
+              const pollRes = await fetch(
+                `/api/kie?taskId=${encodeURIComponent(taskId)}&type=video`
+              );
+              const pollData = await pollRes.json();
+              if (pollData.status === "success") {
+                const vid = (pollData.videos as { url?: string }[] | undefined)?.[0]?.url;
+                if (vid) return vid;
+                throw new Error("Segment finished without a video URL");
+              } else if (pollData.status === "fail") {
+                throw new Error(pollData.error || "Segment generation failed");
+              }
+            }
+            throw new Error("Segment timed out after 8 min");
+          };
+
+          // Track cost — 2× single-segment cost
+          const segmentCost = calcVideoCost(videoModel, 5, true);
+          const totalCost = segmentCost * 2;
+
+          // ── Phase 1: run both Seedance segments in parallel ──
+          let seg1Url: string, seg2Url: string;
+          try {
+            [seg1Url, seg2Url] = await trackApiCall(
+              "kie",
+              "video_generation",
+              "/api/kie",
+              async () => {
+                // 3-frame mode: seg 0 spans frames 0→1, seg 1 spans frames 1→2.
+                // The MID frame (index 1) is pixel-locked — it is the last frame
+                // of seg1 AND the first frame of seg2 — so the 5s seam is a
+                // zero-jump boundary on both sides.
+                return await Promise.all([
+                  runSegment(buildSegmentBody(0)),
+                  runSegment(buildSegmentBody(1)),
+                ]);
+              },
+              { costOverride: totalCost, model: videoModel }
+            );
+            console.log("[ugc-v2-10s] seg1:", seg1Url);
+            console.log("[ugc-v2-10s] seg2:", seg2Url);
+          } catch (segErr) {
+            console.error("[ugc-v2-10s] segment generation failed:", segErr);
+            const msg = segErr instanceof Error ? segErr.message : String(segErr);
+            throw new Error(`Segment generation failed: ${msg}`);
+          }
+
+          // Save BOTH segments to history as a safety net — even if stitch
+          // fails, the user can manually download the 2 parts.
+          useGenerationStore.getState().addHistory({
+            id: crypto.randomUUID(),
+            sourceUrl: productImageUrl || "",
+            resultUrl: seg1Url,
+            profileId: "",
+            mode: "video",
+            prompt: `${activeAngle?.fullScript || ""} [Part 1/2]`,
+            timestamp: Date.now(),
+            source: "ugc",
+            ugc: {
+              angleName: activeAngle?.name,
+              archetypeId: archetype.id || undefined,
+            },
+          });
+          useGenerationStore.getState().addHistory({
+            id: crypto.randomUUID(),
+            sourceUrl: productImageUrl || "",
+            resultUrl: seg2Url,
+            profileId: "",
+            mode: "video",
+            prompt: `${activeAngle?.fullScript || ""} [Part 2/2]`,
+            timestamp: Date.now(),
+            source: "ugc",
+            ugc: {
+              angleName: activeAngle?.name,
+              archetypeId: archetype.id || undefined,
+            },
+          });
+
+          // ── Phase 2: stitch with ffmpeg.wasm ──
+          let stitchedBlob: Blob;
+          try {
+            console.log("[ugc-v2-10s] loading stitch helper…");
+            const { stitchSegments } = await import("@/lib/video-stitch");
+            console.log("[ugc-v2-10s] stitching 2 segments…");
+            stitchedBlob = await stitchSegments([seg1Url, seg2Url]);
+            console.log(
+              `[ugc-v2-10s] stitch complete, blob size=${(stitchedBlob.size / 1024).toFixed(0)}KB`
+            );
+          } catch (stitchErr) {
+            console.error("[ugc-v2-10s] stitch failed:", stitchErr);
+            const msg =
+              stitchErr instanceof Error ? stitchErr.message : String(stitchErr);
+            // Graceful fallback — show segment 1 as the primary video and tell
+            // the user both parts are in Content History.
+            setVideo({
+              videoStatus: "ready",
+              videoUrl: seg1Url,
+              videoTaskId: null,
+              videoError: `Stitching failed (${msg}). Both 5s parts saved to Content History — you can download and merge them in a video editor.`,
+            });
+            useUgcStore.getState().setStep("done");
+            return;
+          }
+
+          // ── Phase 3: upload stitched MP4 ──
+          let finalUrl: string;
+          try {
+            const fd = new FormData();
+            fd.append(
+              "file",
+              new File([stitchedBlob], `ugc-v2-10s-${Date.now()}.mp4`, {
+                type: "video/mp4",
+              })
+            );
+            const upRes = await fetch("/api/upload", { method: "POST", body: fd });
+            const upData = await upRes.json();
+            if (!upRes.ok) {
+              throw new Error(upData.error || `HTTP ${upRes.status}`);
+            }
+            finalUrl = upData.url as string;
+            console.log("[ugc-v2-10s] uploaded stitched video:", finalUrl);
+          } catch (upErr) {
+            console.error("[ugc-v2-10s] upload failed:", upErr);
+            const msg = upErr instanceof Error ? upErr.message : String(upErr);
+            // Fallback — show segment 1 and explain
+            setVideo({
+              videoStatus: "ready",
+              videoUrl: seg1Url,
+              videoTaskId: null,
+              videoError: `Stitched upload failed (${msg}). Both 5s parts are in Content History.`,
+            });
+            useUgcStore.getState().setStep("done");
+            return;
+          }
+
+          // Success — mark the video ready and save the stitched result
+          setVideo({ videoStatus: "ready", videoUrl: finalUrl, videoTaskId: null, videoError: null });
+          useGenerationStore.getState().addHistory({
+            id: crypto.randomUUID(),
+            sourceUrl: productImageUrl || "",
+            resultUrl: finalUrl,
+            profileId: "",
+            mode: "video",
+            prompt: activeAngle?.fullScript || "",
+            timestamp: Date.now(),
+            source: "ugc",
+            ugc: {
+              angleName: activeAngle?.name,
+              script: activeAngle?.fullScript,
+              ttsUrl: undefined,
+              archetypeId: archetype.id || undefined,
+              keyframeUrls: keyframes.filter((k) => k.imageUrl).map((k) => k.imageUrl!),
+            },
+          });
+          useUgcStore.getState().setStep("done");
+        } catch (e) {
+          console.error("[ugc-v2-10s] failed (outer):", e);
+          const msg = e instanceof Error ? e.message : String(e) || "Unknown error";
+          setVideo({
+            videoStatus: "error",
+            videoError: `10s generation failed: ${msg}`,
+          });
+        }
+        return;
+      }
 
       let requestBody: Record<string, unknown>;
-      if (isSeedance) {
-        // Seedance multimodal: pass all 3 image refs + TTS audio for lip-sync.
+      if (isUgcV2) {
+        // UGC v2 5s — Seedance KEYFRAME-anchored mode.
+        // Pixel-locks opening + closing frames. Native audio comes from
+        // quoted dialogue inside the prompt via generate_audio=true.
+        // Mutually exclusive with reference_image_urls / reference_audio_urls
+        // (the /api/kie route enforces this).
+        const openingUrl = keyframes[0]?.imageUrl || "";
+        const closingUrl = keyframes[1]?.imageUrl || "";
+        const openingLine = keyframes[0]?.dialogue || activeAngle?.openingLine || "";
+        const closingLine = keyframes[1]?.dialogue || activeAngle?.closingLine || "";
+        const motionDescr =
+          (activeAngle?.motions && activeAngle.motions[0]) ||
+          activeAngle?.motionPrompt ||
+          archetype.motionPrompt ||
+          "the creator maintains relaxed eye contact, shoulders soften, a micro-smile blooms, the camera holds steady";
+
+        // If the user has AI-enhanced the video prompt, use that verbatim
+        // (it already contains [Image1]/[Image2] tokens and quoted dialogue).
+        // Otherwise, build a default prompt from the dialogue + motion.
+        const defaultPrompt = [
+          `[Image1] ${activeAngle?.openingBeat || "opens by addressing the camera"}`,
+          openingLine ? ` and says naturally: "${openingLine}"` : "",
+          `. ${motionDescr}.`,
+          ` [Image2]`,
+          closingLine ? ` and says: "${closingLine}"` : "",
+          `. Authentic UGC phone selfie, vertical 9:16, slight natural handshake, natural speech with breathing and micro-expressions, home-recorded vibe not a commercial.`,
+        ].join("");
+
+        const videoPrompt = `${editedVideoPrompt ?? brief.videoPrompt ?? defaultPrompt}${adStyleSuffix ? `\n\n${adStyleSuffix}` : ""}`;
+
+        requestBody = {
+          type: "video",
+          video_model: videoModel,
+          prompt: videoPrompt,
+          aspect_ratio: ratio,
+          resolution: "720p",
+          duration: brief.durationSec || 5,
+          generate_audio: !isTextOverlay, // voice comes from prompt's dialogue
+          first_frame_url: openingUrl,
+          last_frame_url: closingUrl,
+        };
+      } else if (isSeedance) {
+        // Legacy Seedance multimodal (Commercial / Cinematic families):
+        // pass all 3 image refs + TTS audio for lip-sync.
         // videoPrompt uses [Image1/2/3] bracket tokens produced by the brief API.
         const refs = keyframes.map((k) => k.imageUrl!).filter(Boolean);
         const basePrompt =
           (editedVideoPrompt ?? brief.videoPrompt) ||
           `[Image1] speaks naturally to camera while presenting [Image2] in the setting shown in [Image3].`;
-        const videoPrompt = `${basePrompt} They say the following line naturally: "${effectiveScript}"`;
+        const videoPrompt = `${basePrompt} They say the following line naturally: "${effectiveScript}"${adStyleSuffix ? `\n\n${adStyleSuffix}` : ""}`;
 
         requestBody = {
           type: "video",
@@ -566,7 +1236,7 @@ export default function UgcStudioPage() {
           [archetype.creatorPrompt, archetype.motionPrompt, "speaking naturally to camera"]
             .filter(Boolean)
             .join(". ");
-        const videoPrompt = `${basePrompt}. Hook: ${activeAngle?.hook || ""}. They say: "${effectiveScript}"`;
+        const videoPrompt = `${basePrompt}. Hook: ${activeAngle?.hook || ""}. They say: "${effectiveScript}"${adStyleSuffix ? `\n\n${adStyleSuffix}` : ""}`;
 
         requestBody = {
           type: "video",
@@ -617,6 +1287,8 @@ export default function UgcStudioPage() {
             useUgcStore.getState().setVideo({ videoStatus: "error", videoError: "No video returned" });
             return;
           }
+          // Overlay text (if any) was baked into the video prompt, so the
+          // returned video already has the text rendered by the model.
           useUgcStore.getState().setVideo({ videoStatus: "ready", videoUrl: vidUrl });
           // Save to content history
           const st = useUgcStore.getState();
@@ -638,7 +1310,6 @@ export default function UgcStudioPage() {
               keyframeUrls: st.keyframes.filter((k) => k.imageUrl).map((k) => k.imageUrl!),
             },
           });
-          // TTS audio is part of the video — no separate history entry needed.
           useUgcStore.getState().setStep("done");
         },
         onError: (err) => {
@@ -667,9 +1338,40 @@ export default function UgcStudioPage() {
   // ─── Step guards ───
 
   useEffect(() => {
+    // Video Ads page no longer exposes Cinematic — clear stale persisted state.
+    if (family === "cinematic") {
+      setFamily(null);
+      setArchetypeId(null);
+      setStep("family");
+      return;
+    }
     // Auto-advance from family → archetype once family picked but archetype empty
     if (step === "family" && family) setStep("archetype");
-  }, [step, family, setStep]);
+  }, [step, family, setStep, setFamily, setArchetypeId]);
+
+  // ─── Model auto-recommendation on family / clip-length CHANGE ───
+  // We nudge the user toward the right model when family or length changes,
+  // but RESPECT manual overrides afterwards. The ref tracks the last
+  // family|clipLength tuple we auto-selected for — when the user clicks a
+  // different model the effect doesn't fire (deps didn't change), and the
+  // tuple stays the same.
+  // Recommendations:
+  //   Commercial   → Seedance 2.0 (keyframe-anchored multishot)
+  //   UGC + 10s    → Seedance 2.0 (mandatory for native lip-sync + 3-frame seam)
+  //   UGC + 5s     → Kling 3.0    (fast iteration for hook variants)
+  const lastAutoModelKey = useRef<string>("");
+  useEffect(() => {
+    const key = `${family || "none"}|${clipLength}`;
+    if (lastAutoModelKey.current === key) return;
+    lastAutoModelKey.current = key;
+    if (family === "commercial") {
+      setVideoModel("seedance-2");
+    } else if (family === "ugc" && clipLength === 10) {
+      setVideoModel("seedance-2");
+    } else if (family === "ugc" && clipLength === 5) {
+      setVideoModel("kling-3.0");
+    }
+  }, [family, clipLength, setVideoModel]);
 
   // ─── UI ───
 
@@ -734,9 +1436,14 @@ export default function UgcStudioPage() {
       )}
 
       {/* ─── Step 1: Family ─── */}
+      {/* Video Ads page exposes only UGC + Commercial. Cinematic stays
+          available in the codebase (used by Studio page) but is filtered out
+          here — this page is laser-focused on conversion-optimized ad creative. */}
       {step === "family" && (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          {(Object.keys(FAMILY_META) as ArchetypeFamily[]).map((f) => {
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-3xl mx-auto">
+          {(Object.keys(FAMILY_META) as ArchetypeFamily[])
+            .filter((f) => f !== "cinematic")
+            .map((f) => {
             const meta = FAMILY_META[f];
             return (
               <button
@@ -844,6 +1551,45 @@ export default function UgcStudioPage() {
                 </Field>
               </div>
 
+              {/* Hair color + Eye color — second row, optional refinements */}
+              <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Field label={t("ugc.creator.hairColor")}>
+                  <select
+                    value={creatorOverrides.hairColor ?? "any"}
+                    onChange={(e) => setCreatorOverrides({ hairColor: e.target.value as CreatorHairColor })}
+                    className="inp"
+                  >
+                    <option value="any">{t("ugc.creator.hairColor.any")}</option>
+                    <option value="black">{t("ugc.creator.hairColor.black")}</option>
+                    <option value="dark-brown">{t("ugc.creator.hairColor.darkBrown")}</option>
+                    <option value="brown">{t("ugc.creator.hairColor.brown")}</option>
+                    <option value="light-brown">{t("ugc.creator.hairColor.lightBrown")}</option>
+                    <option value="blonde">{t("ugc.creator.hairColor.blonde")}</option>
+                    <option value="red">{t("ugc.creator.hairColor.red")}</option>
+                    <option value="auburn">{t("ugc.creator.hairColor.auburn")}</option>
+                    <option value="grey">{t("ugc.creator.hairColor.grey")}</option>
+                    <option value="white">{t("ugc.creator.hairColor.white")}</option>
+                    <option value="colored">{t("ugc.creator.hairColor.colored")}</option>
+                  </select>
+                </Field>
+
+                <Field label={t("ugc.creator.eyeColor")}>
+                  <select
+                    value={creatorOverrides.eyeColor ?? "any"}
+                    onChange={(e) => setCreatorOverrides({ eyeColor: e.target.value as CreatorEyeColor })}
+                    className="inp"
+                  >
+                    <option value="any">{t("ugc.creator.eyeColor.any")}</option>
+                    <option value="dark-brown">{t("ugc.creator.eyeColor.darkBrown")}</option>
+                    <option value="brown">{t("ugc.creator.eyeColor.brown")}</option>
+                    <option value="hazel">{t("ugc.creator.eyeColor.hazel")}</option>
+                    <option value="green">{t("ugc.creator.eyeColor.green")}</option>
+                    <option value="blue">{t("ugc.creator.eyeColor.blue")}</option>
+                    <option value="grey">{t("ugc.creator.eyeColor.grey")}</option>
+                  </select>
+                </Field>
+              </div>
+
               <div className="mt-4 flex justify-end">
                 <button
                   onClick={() => setStep("product")}
@@ -921,6 +1667,25 @@ export default function UgcStudioPage() {
       {/* ─── Step 4: Brief ─── */}
       {step === "brief" && archetype && productImageUrl && (
         <div>
+          {/* Family mode banner — shows which style path the user is on */}
+          {family === "ugc" && (
+            <div className="mb-4 flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-blue-500/8 border border-blue-500/25 text-sm">
+              <span className="text-base">🎥</span>
+              <div>
+                <span className="font-semibold text-blue-600 dark:text-blue-400">UGC Style</span>
+                <span className="text-muted ml-2">Creator on camera · TikTok / Reels format · creator promotes your product directly to the viewer</span>
+              </div>
+            </div>
+          )}
+          {family === "commercial" && (
+            <div className="mb-4 flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-amber-500/8 border border-amber-500/25 text-sm">
+              <span className="text-base">✨</span>
+              <div>
+                <span className="font-semibold text-amber-600 dark:text-amber-400">Commercial Style</span>
+                <span className="text-muted ml-2">No people on screen · product macro shots · ingredient details · cinematic product-hero visuals</span>
+              </div>
+            </div>
+          )}
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold">{t("ugc.brief.title")}</h2>
             <button onClick={() => setStep("product")} className="text-sm text-muted hover:text-foreground flex items-center gap-1">
@@ -1006,30 +1771,76 @@ export default function UgcStudioPage() {
                 })}
               </div>
             </Field>
-            <Field label={t("ugc.voice.label")}>
-              <div className="flex gap-2">
-                {([
-                  { id: "voiceover", key: "ugc.voice.voiceover" },
-                  { id: "text-overlay", key: "ugc.voice.textOverlay" },
-                ] as const).map((v) => {
-                  const active = voiceMode === v.id;
-                  return (
-                    <button
-                      key={v.id}
-                      onClick={() => setVoiceMode(v.id as VoiceMode)}
-                      className={`px-3 py-1.5 text-sm rounded-lg border ${
-                        active ? "bg-primary text-white border-primary" : "border-border hover:border-border-hover"
-                      }`}
-                    >
-                      {t(v.key)}
-                    </button>
-                  );
-                })}
-              </div>
-              <div className="text-[11px] text-muted mt-1">
-                {voiceMode === "text-overlay" ? t("ugc.voice.textOverlayHint") : t("ugc.voice.voiceoverHint")}
-              </div>
-            </Field>
+            {/* Voice mode selector only for UGC family.
+                Commercial + Cinematic videos are silent by design (no
+                narration/voiceover), so we skip this section entirely. */}
+            {isVoiceoverFamily && (
+              <Field label={t("ugc.voice.label")}>
+                <div className="flex gap-2">
+                  {([
+                    { id: "voiceover", key: "ugc.voice.voiceover" },
+                    { id: "text-overlay", key: "ugc.voice.textOverlay" },
+                  ] as const).map((v) => {
+                    const active = voiceMode === v.id;
+                    return (
+                      <button
+                        key={v.id}
+                        onClick={() => setVoiceMode(v.id as VoiceMode)}
+                        className={`px-3 py-1.5 text-sm rounded-lg border ${
+                          active ? "bg-primary text-white border-primary" : "border-border hover:border-border-hover"
+                        }`}
+                      >
+                        {t(v.key)}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="text-[11px] text-muted mt-1">
+                  {voiceMode === "text-overlay" ? t("ugc.voice.textOverlayHint") : t("ugc.voice.voiceoverHint")}
+                </div>
+              </Field>
+            )}
+
+            {/* Clip-length selector — UGC v2 only (UGC family + Seedance).
+                5s = 2 anchored frames, 1 Seedance call.
+                10s = 4 anchored frames, 2 parallel Seedance calls stitched
+                together. 10s costs roughly 2× and takes ~2× longer. */}
+            {isVoiceoverFamily && isSeedance && (
+              <Field label={tM("ugc.clipLength.label", "Clip length")}>
+                <div className="flex gap-2">
+                  {([
+                    { sec: 5 as const, cost: "≈$5.85" },
+                    { sec: 10 as const, cost: "≈$11.70" },
+                  ]).map((opt) => {
+                    const active = clipLength === opt.sec;
+                    return (
+                      <button
+                        key={opt.sec}
+                        onClick={() => setClipLength(opt.sec)}
+                        className={`px-3 py-1.5 text-sm rounded-lg border flex flex-col items-start gap-0 ${
+                          active ? "bg-primary text-white border-primary" : "border-border hover:border-border-hover"
+                        }`}
+                      >
+                        <span className="font-medium">
+                          {opt.sec}s
+                          <span className={`ml-1.5 text-[10px] ${active ? "text-white/80" : "text-muted"}`}>
+                            ({opt.sec === 5 ? tM("ugc.clipLength.oneSegment", "1 segment") : tM("ugc.clipLength.twoSegments", "2 stitched segments")})
+                          </span>
+                        </span>
+                        <span className={`text-[10px] font-mono ${active ? "text-white/80" : "text-muted"}`}>
+                          {opt.cost}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="text-[11px] text-muted mt-1">
+                  {clipLength === 10
+                    ? tM("ugc.clipLength.hint10", "10s = 4 keyframes, 2 Seedance renders stitched with 200ms audio crossfade. ~2× cost and wait time.")
+                    : tM("ugc.clipLength.hint5", "5s = 2 keyframes, 1 Seedance render. Fastest and cheapest.")}
+                </div>
+              </Field>
+            )}
             <div className="pt-2 flex justify-end">
               <button
                 onClick={runBrief}
@@ -1047,6 +1858,20 @@ export default function UgcStudioPage() {
       {/* ─── Step 5: Storyboard ─── */}
       {step === "storyboard" && brief && (
         <div>
+          {family === "ugc" && (
+            <div className="mb-4 flex items-center gap-2.5 px-4 py-2 rounded-xl bg-blue-500/8 border border-blue-500/25 text-xs">
+              <span>🎥</span>
+              <span className="font-semibold text-blue-600 dark:text-blue-400">UGC Style</span>
+              <span className="text-muted">· Creator on camera in every frame · TikTok / Reels</span>
+            </div>
+          )}
+          {family === "commercial" && (
+            <div className="mb-4 flex items-center gap-2.5 px-4 py-2 rounded-xl bg-amber-500/8 border border-amber-500/25 text-xs">
+              <span>✨</span>
+              <span className="font-semibold text-amber-600 dark:text-amber-400">Commercial Style</span>
+              <span className="text-muted">· Product macro · ingredient details · no people</span>
+            </div>
+          )}
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold">
               {isSeedance ? t("ugc.story.titleSeedance") : t("ugc.story.title")}
@@ -1139,33 +1964,74 @@ export default function UgcStudioPage() {
             </div>
           )}
 
+          {/* Storyboard guidance banner — research shows the hook frame and the
+              end (CTA) frame are where storyboarding actually moves conversion.
+              Middle frames are de-emphasised. */}
+          <div className="mb-3 px-4 py-3 rounded-lg bg-accent/5 border border-accent/20">
+            <div className="text-xs font-semibold text-accent mb-1">
+              {tM("ugc.story.philosophy.title", "Storyboard the hook + end frame. Improvise the middle.")}
+            </div>
+            <div className="text-[11px] text-muted leading-snug">
+              {tM(
+                "ugc.story.philosophy.body",
+                "First 1.5s arrest viewers; the end frame closes the sale. Storyboarding these two beats lifts hook rate 20–40% (Motion + Foreplay 2025). The middle is improvisation territory — perfecting it is process theater."
+              )}
+            </div>
+          </div>
+
           {/* Keyframes — drag-to-reorder, add/remove */}
+          {/* UGC v2 = UGC family + Seedance uses 2 anchored frames (opening + closing) */}
           <div className="flex flex-wrap gap-4 mb-2">
             {keyframes.map((k, arrIdx) => {
               const selected = heroFrameIndex === k.index;
               const isDragging = dragIndex === arrIdx;
               const isDragOver = dragOverIndex === arrIdx;
+              const isUgcV2Frame = family === "ugc" && isSeedance;
+              const frameLabel = isUgcV2Frame
+                ? k.label || (arrIdx === 0 ? "Opening" : "Closing")
+                : `${t("ugc.story.frame")} ${arrIdx + 1}`;
+              // Hook frame = always frame 0. End frame = last frame.
+              // Middle frames (anything in between) get de-emphasised.
+              const isHookFrame = arrIdx === 0;
+              const isEndFrame = arrIdx === keyframes.length - 1;
+              const isMiddleFrame = !isHookFrame && !isEndFrame;
+              // Width: 2 frames split the row in half; 3 frames use thirds.
+              const frameWidthClass = isUgcV2Frame
+                ? "w-[calc(50%-0.75rem)] min-w-[180px]"
+                : "w-[calc(33.333%-0.75rem)] min-w-[140px]";
               return (
                 <div
                   key={`frame-${arrIdx}`}
-                  draggable
-                  onDragStart={() => handleFrameDragStart(arrIdx)}
+                  draggable={!isUgcV2Frame}
+                  onDragStart={(e) => handleFrameDragStart(e, arrIdx)}
                   onDragOver={(e) => handleFrameDragOver(e, arrIdx)}
-                  onDrop={() => handleFrameDrop(arrIdx)}
+                  onDrop={(e) => handleFrameDrop(e, arrIdx)}
                   onDragEnd={handleFrameDragEnd}
-                  className={`w-[calc(33.333%-0.75rem)] min-w-[140px] rounded-xl border bg-card overflow-hidden transition-all
-                    ${selected ? "border-accent ring-2 ring-accent/30" : "border-border"}
+                  className={`${frameWidthClass} rounded-xl border bg-card overflow-hidden transition-all
+                    ${selected ? "border-accent ring-2 ring-accent/30" : isHookFrame ? "border-amber-400/60 ring-1 ring-amber-400/30" : isEndFrame ? "border-emerald-400/60 ring-1 ring-emerald-400/30" : isMiddleFrame ? "border-border opacity-90" : "border-border"}
                     ${isDragging ? "opacity-40 scale-95" : ""}
                     ${isDragOver && !isDragging ? "ring-2 ring-accent/50 border-accent/50" : ""}
                   `}
                   style={{ flexShrink: 0 }}
                 >
                   {/* Drag handle + remove */}
-                  <div className="flex items-center justify-between px-2 py-1.5 bg-card-hover/50 cursor-grab active:cursor-grabbing">
-                    <div className="flex items-center gap-1 text-muted">
-                      <GripVertical className="w-3.5 h-3.5" />
-                      <span className="text-[10px] font-medium uppercase tracking-wider">
-                        {t("ugc.story.frame")} {arrIdx + 1}
+                  <div className={`flex items-center justify-between px-2 py-1.5 cursor-grab active:cursor-grabbing ${
+                    isHookFrame ? "bg-amber-400/10" : isEndFrame ? "bg-emerald-400/10" : "bg-card-hover/50"
+                  }`}>
+                    <div className="flex items-center gap-1.5">
+                      {!isUgcV2Frame && <GripVertical className="w-3.5 h-3.5 text-muted" />}
+                      {isHookFrame && (
+                        <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-400/20 text-amber-500">
+                          {tM("ugc.story.hook", "Hook")}
+                        </span>
+                      )}
+                      {isEndFrame && !isHookFrame && (
+                        <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-emerald-400/20 text-emerald-500">
+                          {tM("ugc.story.end", "End / CTA")}
+                        </span>
+                      )}
+                      <span className={`text-[10px] font-medium uppercase tracking-wider ${isMiddleFrame ? "text-muted/70" : "text-muted"}`}>
+                        {frameLabel}
                       </span>
                     </div>
                     <div className="flex items-center gap-0.5">
@@ -1230,9 +2096,51 @@ export default function UgcStudioPage() {
                       </div>
                     )}
                   </button>
+
+                  {/* UGC v2 — per-frame dialogue input. What the character
+                      says at/during this frame. Included in the AI-Enhance
+                      prompt for Seedance generate_audio. */}
+                  {isUgcV2Frame && (
+                    <div className="px-2.5 pb-2.5 pt-1.5 space-y-1">
+                      <label className="text-[10px] uppercase font-semibold tracking-wider text-muted flex items-center gap-1">
+                        <Volume2 className="w-2.5 h-2.5 text-accent" />
+                        {tM("ugc.dialogue.label", "What they say here")}
+                      </label>
+                      <textarea
+                        value={k.dialogue || ""}
+                        onChange={(e) =>
+                          patchKeyframe(k.index, { dialogue: e.target.value })
+                        }
+                        placeholder={tM(
+                          "ugc.dialogue.placeholder",
+                          arrIdx === 0
+                            ? "e.g. Okay day 14 of this collagen shot, I'm stunned."
+                            : "e.g. Recovery's different. Link's in my bio — go."
+                        )}
+                        rows={2}
+                        className="w-full text-xs rounded-md border border-border bg-background px-2 py-1.5 leading-snug resize-none focus:outline-none focus:ring-1 focus:ring-accent"
+                      />
+                    </div>
+                  )}
                 </div>
               );
             })}
+
+            {/* Append-drop slot — hidden for UGC v2 (exactly 2 frames required) */}
+            {!(family === "ugc" && isSeedance) && (
+              <div
+                onDragOver={handleAppendDragOver}
+                onDrop={handleAppendDrop}
+                onClick={() => setShowContentLibrary(true)}
+                className="w-[calc(33.333%-0.75rem)] min-w-[140px] aspect-[9/16] rounded-xl border-2 border-dashed border-border/60 flex flex-col items-center justify-center gap-1.5 text-muted hover:border-accent/60 hover:text-accent hover:bg-accent/5 transition-colors cursor-pointer"
+                title={t("ugc.story.clickToAdd")}
+              >
+                <Plus className="w-6 h-6" />
+                <span className="text-[10px] uppercase tracking-wider font-medium text-center px-2">
+                  {t("ugc.story.addFromLibrary")}
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Add frame from content library toggle */}
@@ -1258,18 +2166,34 @@ export default function UgcStudioPage() {
                 ) : (
                   <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-2 max-h-[200px] overflow-y-auto">
                     {contentHistory.map((item) => (
-                      <button
+                      <div
                         key={item.id}
+                        role="button"
+                        tabIndex={0}
+                        draggable
+                        onDragStart={(e) => handleLibraryDragStart(e, item.resultUrl)}
                         onClick={() => addFrameFromHistory(item.resultUrl)}
-                        className="group relative aspect-square rounded-lg overflow-hidden border border-border hover:border-accent/50 hover:ring-1 hover:ring-accent/30 transition-all"
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            addFrameFromHistory(item.resultUrl);
+                          }
+                        }}
+                        className="group relative aspect-square rounded-lg overflow-hidden border border-border hover:border-accent/50 hover:ring-1 hover:ring-accent/30 transition-all cursor-grab active:cursor-grabbing"
                         title={t("ugc.story.clickToAdd")}
                       >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={item.resultUrl} alt="" className="w-full h-full object-cover" loading="lazy" />
-                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+                        <img
+                          src={item.resultUrl}
+                          alt=""
+                          className="w-full h-full object-cover pointer-events-none"
+                          loading="lazy"
+                          draggable={false}
+                        />
+                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100 pointer-events-none">
                           <Plus className="w-5 h-5 text-white drop-shadow-lg" />
                         </div>
-                      </button>
+                      </div>
                     ))}
                   </div>
                 )}
@@ -1326,6 +2250,9 @@ export default function UgcStudioPage() {
             )}
           </div>
 
+          {/* Luxury ad headline overlay */}
+          <UgcOverlayInputWrapper />
+
           <div className="flex items-center justify-between">
             <div className="text-xs text-muted">
               {t("ugc.model.using")}: <span className="font-medium text-foreground">{t(
@@ -1370,7 +2297,7 @@ export default function UgcStudioPage() {
                 {videoUrl ? (
                   <video src={videoUrl} controls autoPlay loop className="w-full h-full object-cover" />
                 ) : videoStatus === "pending" ? (
-                  <div className="text-center">
+                  <div className="text-center px-4">
                     <Loader2 className="w-10 h-10 text-accent animate-spin mx-auto" />
                     <div className="text-sm text-muted mt-2">
                       {isSeedance ? t("ugc.video.renderingSeedance") : t("ugc.video.rendering")}
@@ -1387,7 +2314,7 @@ export default function UgcStudioPage() {
 
             <div className="rounded-xl border border-border bg-card p-4 space-y-4">
               {/* Voiceover OR text overlay section */}
-              {voiceMode === "text-overlay" ? (
+              {effectiveVoiceMode === "text-overlay" ? (
                 <div>
                   <div className="text-xs font-medium uppercase tracking-wider text-muted mb-2 flex items-center gap-2">
                     {t("ugc.voice.textOverlay")}
@@ -1427,9 +2354,9 @@ export default function UgcStudioPage() {
                 </div>
                 <p className="text-sm leading-relaxed">{effectiveScript}</p>
               </div>
-              {videoUrl && (voiceMode === "text-overlay" || ttsUrl) && (
+              {videoUrl && (effectiveVoiceMode === "text-overlay" || ttsUrl) && (
                 <div className="pt-2 border-t border-border text-xs text-muted">
-                  {voiceMode === "text-overlay" ? t("ugc.video.tipTextOverlay") : isSeedance ? t("ugc.video.tipSeedance") : t("ugc.video.tip")}
+                  {effectiveVoiceMode === "text-overlay" ? t("ugc.video.tipTextOverlay") : isSeedance ? t("ugc.video.tipSeedance") : t("ugc.video.tip")}
                 </div>
               )}
             </div>
@@ -1459,5 +2386,22 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <div className="text-xs font-medium text-muted mb-1.5">{label}</div>
       {children}
     </label>
+  );
+}
+
+// Wraps the shared LuxuryOverlayInput with ui-store state for the UGC page.
+function UgcOverlayInputWrapper() {
+  const overlayText = useUIStore((s) => s.overlayText);
+  const setOverlayText = useUIStore((s) => s.setOverlayText);
+  const overlayFontId = useUIStore((s) => s.overlayFontId);
+  const setOverlayFontId = useUIStore((s) => s.setOverlayFontId);
+  return (
+    <LuxuryOverlayInput
+      value={overlayText}
+      onChange={setOverlayText}
+      fontId={overlayFontId}
+      onFontChange={setOverlayFontId}
+      progress={null}
+    />
   );
 }

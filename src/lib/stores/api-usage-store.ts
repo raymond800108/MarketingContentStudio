@@ -9,6 +9,7 @@ export type ApiAction =
   | "video_generation"
   | "product_analysis"
   | "caption_generation"
+  | "overlay_suggest"
   | "file_upload"
   | "blotato_publish"
   | "blotato_media"
@@ -110,6 +111,7 @@ const ACTION_MAP: Record<ApiAction, string> = {
   video_generation: "video-generate",
   product_analysis: "product-analysis",
   caption_generation: "caption-generate",
+  overlay_suggest: "overlay-suggest",
   file_upload: "file-upload",
   blotato_publish: "blotato-publish",
   blotato_media: "blotato-media",
@@ -123,6 +125,7 @@ const PRICE_TABLE: Record<string, number> = {
   "video-generate": 2.00,   // raw $0.40 × 5; callers pass costOverride for per-model pricing
   "product-analysis": 0.15,  // raw $0.03 × 5
   "caption-generate": 0.10,  // raw $0.02 × 5
+  "overlay-suggest": 0.05,   // raw ~$0.01 × 5 (GPT-4o vision, 3 slogans)
   "file-upload": 0,
   "blotato-publish": 0,
   "blotato-media": 0,

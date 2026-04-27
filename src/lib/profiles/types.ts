@@ -25,7 +25,9 @@ export interface ShotType {
 }
 
 export interface SizeConfig {
+  /** Translation key for the label (e.g. "studio.sizeLabel.garment") */
   label: string;
+  /** Translation key for the placeholder (e.g. "studio.sizePlaceholder.garment") */
   placeholder: string;
   getSizePrompt: (productType: string, placement: string, dimension: string) => string;
 }

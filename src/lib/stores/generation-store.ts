@@ -24,9 +24,30 @@ export interface HistoryItem {
   sourceUrl: string;
   resultUrl: string;
   profileId: string;
-  mode: "image" | "video";
+  mode: "image" | "video" | "audio";
   prompt: string;
   timestamp: number;
+  /**
+   * Where this content was generated from.
+   * - "studio"  — image/video studio page
+   * - "ugc"     — UGC pipeline
+   * - "social"  — social media scheduler
+   * Defaults to "studio" for backwards compat.
+   */
+  source?: "studio" | "ugc" | "social";
+  /** UGC-specific metadata — present when source === "ugc". */
+  ugc?: {
+    /** Which marketing angle was active (e.g. "FOMO Drop"). */
+    angleName?: string;
+    /** The spoken script text. */
+    script?: string;
+    /** TTS voiceover CDN URL. */
+    ttsUrl?: string;
+    /** Archetype used. */
+    archetypeId?: string;
+    /** Storyboard keyframe URLs (up to 3). */
+    keyframeUrls?: string[];
+  };
 }
 
 interface GenerationStore {
@@ -46,6 +67,7 @@ interface GenerationStore {
   // History
   history: HistoryItem[];
   addHistory: (item: HistoryItem) => void;
+  removeHistoryItem: (id: string) => void;
   clearHistory: () => void;
 
   // Loading
@@ -83,7 +105,9 @@ export const useGenerationStore = create<GenerationStore>()(
       // History
       history: [],
       addHistory: (item) =>
-        set((s) => ({ history: [item, ...s.history].slice(0, 100) })),
+        set((s) => ({ history: [item, ...s.history].slice(0, 200) })),
+      removeHistoryItem: (id) =>
+        set((s) => ({ history: s.history.filter((h) => h.id !== id) })),
       clearHistory: () => set({ history: [] }),
 
       // Loading

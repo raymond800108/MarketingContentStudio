@@ -9,6 +9,8 @@ interface UIStore {
   selectedTemplate: string | null;
   productDimension: string;
   bottleIngredients: string;
+  overlayText: string;
+  overlayFontId: string;
 
   setContentType: (type: "image" | "video") => void;
   setAspectRatio: (ratio: string) => void;
@@ -16,6 +18,8 @@ interface UIStore {
   setSelectedTemplate: (id: string | null) => void;
   setProductDimension: (dim: string) => void;
   setBottleIngredients: (ing: string) => void;
+  setOverlayText: (txt: string) => void;
+  setOverlayFontId: (id: string) => void;
   resetUI: () => void;
 }
 
@@ -26,6 +30,8 @@ export const useUIStore = create<UIStore>((set) => ({
   selectedTemplate: null,
   productDimension: "",
   bottleIngredients: "",
+  overlayText: "",
+  overlayFontId: "lyon",
 
   setContentType: (contentType) => set({ contentType }),
   setAspectRatio: (aspectRatio) => set({ aspectRatio }),
@@ -33,11 +39,14 @@ export const useUIStore = create<UIStore>((set) => ({
   setSelectedTemplate: (selectedTemplate) => set({ selectedTemplate }),
   setProductDimension: (productDimension) => set({ productDimension }),
   setBottleIngredients: (bottleIngredients) => set({ bottleIngredients }),
+  setOverlayText: (overlayText) => set({ overlayText }),
+  setOverlayFontId: (overlayFontId) => set({ overlayFontId }),
   resetUI: () =>
     set({
       contentType: "image",
       selectedTemplate: null,
       productDimension: "",
       bottleIngredients: "",
+      overlayText: "",
     }),
 }));

@@ -163,14 +163,6 @@ Return ONLY valid JSON, no markdown.`,
       prompt: "Transforms any messy photo into a clean white background product shot, pure white seamless backdrop, even studio lighting, professional e-commerce ready",
       description: "Transforms any messy photo into a clean white background product shot",
     },
-    {
-      id: "ugc-model",
-      name: "UGC Style",
-      icon: "\u{1F4F1}",
-      prompt: "User-generated content style — casual, authentic-feeling photo of someone wearing the jewelry in everyday life, natural lighting, smartphone aesthetic",
-      description: "Authentic UGC-style photo for social media campaigns",
-      dynamic: true,
-    },
   ],
 
   shotTypes: [

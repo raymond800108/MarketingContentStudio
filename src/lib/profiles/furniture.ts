@@ -1,146 +1,141 @@
 import type { ProductProfile } from "./types";
 import { SOCIAL_PRESETS } from "./shared";
 
-function getFurnitureSizePrompt(productType: string, _placement: string, dimension: string): string {
+function getCarpetSizePrompt(_productType: string, _placement: string, dimension: string): string {
   if (!dimension.trim()) return "";
   const raw = dimension.trim().toLowerCase();
   const nums = raw.match(/[\d.]+/g)?.map(Number).filter((n) => !isNaN(n));
   if (!nums || nums.length === 0) return "";
-  const maxCm = Math.max(...nums);
-  const t = productType.toLowerCase();
 
   let scaleRef = "";
-  if (t.includes("chair") || t.includes("stool")) {
-    if (maxCm <= 50) scaleRef = "a small accent chair — about knee height, compact enough to fit beside a sofa";
-    else if (maxCm <= 90) scaleRef = "a standard dining or desk chair — seat at knee height, backrest reaching mid-torso when sitting";
-    else scaleRef = "a tall bar stool or high-back chair — seat above knee height";
-  } else if (t.includes("table") || t.includes("desk")) {
-    if (maxCm <= 50) scaleRef = "a low coffee table or side table — about knee height, fits next to a sofa";
-    else if (maxCm <= 80) scaleRef = "a standard dining or work table — waist height when standing";
-    else scaleRef = "a tall counter or standing desk — chest to shoulder height";
-  } else if (t.includes("sofa") || t.includes("couch")) {
-    scaleRef = "a full-size sofa — seat height at knee level, wide enough for 2-3 people side by side";
-  } else if (t.includes("bed")) {
-    scaleRef = "a bed — low platform at knee height, length of a person lying down";
-  } else if (t.includes("shelf") || t.includes("bookcase") || t.includes("cabinet")) {
-    if (maxCm <= 100) scaleRef = "a low storage unit — waist height or below, fits under a window";
-    else scaleRef = "a tall shelving unit — roughly human height or taller";
-  } else if (t.includes("lamp") || t.includes("light")) {
-    if (maxCm <= 40) scaleRef = "a small table lamp — sits on a desk or nightstand";
-    else if (maxCm <= 120) scaleRef = "a medium floor lamp — roughly waist to chest height";
-    else scaleRef = "a tall floor lamp — roughly head height or taller";
+  if (nums.length >= 2) {
+    const [a, b] = [Math.min(...nums), Math.max(...nums)];
+    if (b <= 100) scaleRef = `a small accent rug (${a}×${b} cm) — doormat or bedside size`;
+    else if (b <= 200) scaleRef = `a medium area rug (${a}×${b} cm) — fits under a coffee table or in a hallway`;
+    else scaleRef = `a large area rug (${a}×${b} cm) — anchors a full living room or dining set`;
   } else {
-    if (maxCm <= 50) scaleRef = "a small furniture piece — roughly knee height";
-    else if (maxCm <= 100) scaleRef = "a medium furniture piece — roughly waist height";
-    else scaleRef = "a large furniture piece — roughly human-height scale";
+    const d = nums[0];
+    if (d <= 100) scaleRef = `a small rug (~${d} cm) — accent or doormat size`;
+    else if (d <= 200) scaleRef = `a medium rug (~${d} cm) — hallway or bedside runner`;
+    else scaleRef = `a large rug (~${d} cm) — full room area rug`;
   }
 
   return (
-    `CRITICAL SCALE RULE: This furniture is ${scaleRef} (dimensions: ${raw} cm). ` +
-    "Render it at REALISTIC room scale — it should look proportional to the room, doorways, windows, and any people present. " +
-    "Do NOT make the furniture look miniature or oversized. Use standard room proportions as reference (2.4m ceiling, 80cm door width). "
+    `CRITICAL SCALE RULE: This carpet/rug is ${scaleRef} (dimensions: ${raw} cm). ` +
+    "Render it flat on the floor at REALISTIC room scale — proportional to the furniture, walls, and room size visible in the scene. " +
+    "Show the carpet's full pattern, texture and edges clearly. "
   );
 }
 
 export const furniture: ProductProfile = {
   id: "furniture",
-  name: "Furniture & Home",
-  icon: "\u{1FA91}",
-  description: "Sofas, tables, chairs, shelving, lighting — furniture and home decor",
+  name: "Carpet & Home",
+  icon: "\u{1F9F6}",
+  description: "Rugs, carpets, runners, mats — carpet and home textiles",
 
-  analysisSystemPrompt: `You are an interior design and furniture expert. Analyze the furniture in this image and return JSON with these fields:
-- type: the furniture type (sofa, dining table, chair, bookshelf, bed, lamp, desk, cabinet, etc.)
-- description: a concise description (materials, color, design style, notable features)
-- body_placement: where it goes in a room (living room floor, dining area, bedroom, entryway, etc.)
-- materials: array of detected materials (oak, walnut, leather, fabric, metal, glass, marble, etc.)
-- style: the design style (modern, mid-century, scandinavian, industrial, rustic, minimalist, etc.)
-- color: primary color and finish (natural oak, matte black, cream upholstery, etc.)
+  analysisSystemPrompt: `You are a carpet and home textiles expert. Analyze the carpet/rug in this image and return JSON with these fields:
+- type: the carpet type (area rug, runner, doormat, accent rug, wall-to-wall, kilim, shag, Persian, etc.)
+- description: a concise description (pattern, color palette, weave style, notable features)
+- body_placement: where it goes in a home (living room floor, hallway, bedroom, entryway, dining room, etc.)
+- materials: array of detected materials (wool, silk, cotton, jute, polyester, nylon, viscose, etc.)
+- style: the design style (traditional, modern, bohemian, minimalist, Moroccan, Persian, Scandinavian, etc.)
+- color: primary colors and pattern type (navy geometric, cream floral, multicolor kilim, etc.)
 Return ONLY valid JSON, no markdown.`,
 
   templates: [
+    // ── Carpet-focused room scenes ─────────────────────────────────
     {
-      id: "white-studio",
-      name: "White Studio",
-      icon: "\u2B1C",
-      prompt: "Clean white cyclorama studio, the furniture piece centered and fully visible, soft even lighting from multiple directions, no shadows, professional catalog photography for e-commerce",
-      description: "Clean white studio backdrop for e-commerce catalog",
-    },
-    {
-      id: "room-modern",
-      name: "Modern Room Scene",
-      icon: "\u{1F3E0}",
-      prompt: "Styled in a contemporary modern living space — clean lines, neutral palette, curated decor, natural light from large windows, the furniture as the focal point, interior design magazine quality",
-      description: "Contemporary modern living space with curated styling",
-    },
-    {
-      id: "room-cozy",
-      name: "Cozy Room Scene",
+      id: "living-room-carpet",
+      name: "Living Room Floor",
       icon: "\u{1F6CB}\uFE0F",
-      prompt: "Warm, inviting room setting — soft textiles, warm lighting, plants, books, lived-in but styled atmosphere, the furniture looking comfortable and welcoming, hygge aesthetic",
-      description: "Warm, inviting room with soft textiles and warm lighting",
+      prompt: "The carpet laid flat on a polished hardwood floor in a contemporary living room, a modern sofa and coffee table partially resting on it, the carpet's full pattern and texture are the hero of the shot, warm natural light from floor-to-ceiling windows, interior design magazine quality photography",
+      description: "Carpet as the centrepiece of a modern living room",
+      dynamic: true,
     },
     {
-      id: "detail-material",
-      name: "Material Detail",
-      icon: "\u{1F50D}",
-      prompt: "Extreme close-up on material quality — wood grain, leather texture, fabric weave, metal finish, joinery details, macro photography revealing craftsmanship and quality",
-      description: "Macro close-up on wood grain, fabric, joinery details",
+      id: "bedroom-carpet",
+      name: "Bedroom Setting",
+      icon: "\u{1F6CF}\uFE0F",
+      prompt: "The carpet placed beside or under a stylish bed in a serene bedroom, bare feet stepping onto it to emphasise softness, neutral bedding and nightstand, soft morning light, the carpet's pattern and pile texture clearly visible, cosy lifestyle photography",
+      description: "Soft carpet beside a bed with cosy morning light",
+      dynamic: true,
     },
     {
-      id: "lifestyle-overhead",
-      name: "Lifestyle Overhead",
-      icon: "\u{1F4F7}",
-      prompt: "Top-down overhead view of the furniture in use — styled with accessories, books, plants, coffee cups, showing the piece in daily life, editorial flat-lay perspective",
-      description: "Top-down overhead view showing the piece in daily life",
+      id: "hallway-runner",
+      name: "Hallway Runner",
+      icon: "\u{1F6AA}",
+      prompt: "A long runner carpet stretching through an elegant hallway, wooden floor visible on both sides, framed art on the walls, perspective shot drawing the eye along the full length and pattern of the runner, architectural interior photography",
+      description: "Runner carpet in an elegant hallway with perspective",
+      dynamic: true,
     },
     {
-      id: "scale-human",
-      name: "Scale with Person",
-      icon: "\u{1F9CD}",
-      prompt: "The furniture shown with a person interacting naturally — sitting, reaching, walking past — to demonstrate real-world scale and proportions, lifestyle interior photography",
-      description: "Person interacting with furniture to show real-world scale",
+      id: "dining-room-carpet",
+      name: "Dining Room",
+      icon: "\u{1F37D}\uFE0F",
+      prompt: "The carpet anchoring a dining table and chairs on a clean floor, place settings and a centrepiece on the table, the rug's border and pattern clearly shown, warm pendant lighting overhead, editorial home photography",
+      description: "Carpet anchoring a dining set with warm overhead light",
+      dynamic: true,
     },
     {
-      id: "catalog-angle",
-      name: "Catalog 3/4 Angle",
-      icon: "\u{1F4D0}",
-      prompt: "Classic catalog three-quarter angle view, the furniture slightly rotated to show depth and form, clean gradient background, professional product photography with precise lighting",
-      description: "Classic three-quarter angle showing depth and form",
+      id: "entryway-mat",
+      name: "Entryway Welcome",
+      icon: "\u{1F3E0}",
+      prompt: "The carpet or mat placed at a stylish entryway, front door partially visible, shoes neatly arranged beside it, console table with keys and a plant, welcoming atmosphere, natural daylight from the doorway highlighting the carpet's texture",
+      description: "Welcoming entryway mat by the front door",
+      dynamic: true,
     },
     {
-      id: "seasonal-styled",
-      name: "Seasonal Styling",
-      icon: "\u{1F342}",
-      prompt: "Seasonally styled room scene — spring flowers, summer breeze, autumn warmth, or winter coziness, the furniture dressed for the season with appropriate textiles and decor",
-      description: "Room styled with seasonal decor and atmosphere",
+      id: "kids-playroom",
+      name: "Kids Playroom",
+      icon: "\u{1F9F8}",
+      prompt: "The carpet spread on the floor of a bright, cheerful playroom, children's toys and books around, soft natural light, the colourful pattern of the carpet inviting play, safe and cosy family lifestyle photography",
+      description: "Bright playroom floor with toys and cheerful vibe",
+      dynamic: true,
     },
     {
-      id: "outdoor-patio",
-      name: "Outdoor / Patio",
+      id: "outdoor-patio-rug",
+      name: "Outdoor Patio Rug",
       icon: "\u{1F333}",
-      prompt: "Outdoor or patio setting — garden, terrace, or balcony with natural greenery and sky, the furniture in an alfresco dining or lounging arrangement, golden hour lighting",
-      description: "Outdoor patio or garden setting with natural light",
+      prompt: "An outdoor-rated rug on a sunny terrace or patio, wicker furniture and potted plants nearby, garden greenery in the background, the rug's weather-resistant weave and pattern clearly visible, golden hour lifestyle photography",
+      description: "Outdoor rug on a sunny patio with garden views",
+      dynamic: true,
     },
     {
-      id: "window-light",
+      id: "flat-lay-carpet",
+      name: "Flat Lay",
+      icon: "\u{1F4F7}",
+      prompt: "Top-down overhead flat-lay of the carpet on a clean surface, perfectly straight edges, full pattern visible, a styled corner fold revealing the backing, a pair of slippers or a cup of tea placed on it for scale, clean catalog photography",
+      description: "Overhead flat-lay showing full pattern and texture",
+    },
+    {
+      id: "detail-texture-carpet",
+      name: "Texture Close-Up",
+      icon: "\u{1F50D}",
+      prompt: "Extreme macro close-up of the carpet's weave, pile, or knot structure, fingers gently touching the surface to show softness and depth, individual fibres and colour gradients visible, studio-lit product macro photography",
+      description: "Macro close-up on weave, pile and fibre detail",
+    },
+    {
+      id: "rolled-stack",
+      name: "Rolled / Stacked",
+      icon: "\u{1F4E6}",
+      prompt: "Multiple carpets rolled and stacked elegantly in a showroom or warehouse setting, cross-section showing thickness and density, a partially unrolled carpet in front revealing its pattern, professional trade catalog photography",
+      description: "Rolled carpets stacked showing thickness and variety",
+    },
+    {
+      id: "window-light-carpet",
       name: "Window Light",
       icon: "\u2600\uFE0F",
-      prompt: "Beautiful natural window light scene — the furniture bathed in soft directional sunlight, long shadows, dust particles in air, warm intimate atmosphere, architectural photography",
-      description: "Natural window light with soft shadows and warm atmosphere",
+      prompt: "The carpet on a wooden floor bathed in beautiful directional sunlight from a nearby window, long soft shadows, dust particles in the air, the sunlight highlighting the carpet's colour and texture, warm intimate atmosphere",
+      description: "Natural window light highlighting colour and texture",
+      dynamic: true,
     },
     {
-      id: "dark-moody",
-      name: "Dark & Moody",
-      icon: "\u{1F30C}",
-      prompt: "Dark, dramatic interior setting — deep wall colors, accent lighting, the furniture highlighted with a single directional light source, luxury editorial atmosphere",
-      description: "Dark dramatic setting with accent lighting",
-    },
-    {
-      id: "minimalist-space",
+      id: "minimalist-carpet",
       name: "Minimalist Space",
       icon: "\u25FE",
-      prompt: "Ultra-minimal interior — bare walls, concrete or wood floor, almost empty room with just the furniture piece, the simplicity emphasizing form and design, Japanese-inspired aesthetics",
-      description: "Ultra-minimal space emphasizing pure form and design",
+      prompt: "The carpet as the sole design element in an ultra-minimal room — bare white walls, polished concrete or pale wood floor, almost no furniture, the simplicity drawing all attention to the carpet's pattern and craftsmanship, Japanese-inspired aesthetics",
+      description: "Ultra-minimal room with carpet as the only focal point",
+      dynamic: true,
     },
   ],
 
@@ -150,9 +145,9 @@ Return ONLY valid JSON, no markdown.`,
   consistencyPrefix: "",
 
   sizeConfig: {
-    label: "Dimensions (cm)",
-    placeholder: "e.g. W120\u00D7D60\u00D7H75",
-    getSizePrompt: getFurnitureSizePrompt,
+    label: "studio.sizeLabel.carpet",
+    placeholder: "studio.sizePlaceholder.carpet",
+    getSizePrompt: getCarpetSizePrompt,
   },
 
   defaultAspectRatio: "16:9",

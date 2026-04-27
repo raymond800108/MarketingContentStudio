@@ -31,6 +31,11 @@ const HARDCODED_ALLOWLIST: AllowlistEntryWithExtras[] = [
     blotatoAccountId: "41768",
     blotatoAccountLabel: "necksy_de",
   },
+  {
+    email: "tianjia.hsieh@gmail.com",
+    role: "member",
+    credits: 100,
+  },
 ];
 
 function getAllowlist(): AllowlistEntry[] {

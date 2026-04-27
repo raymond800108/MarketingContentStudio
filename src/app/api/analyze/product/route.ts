@@ -33,6 +33,22 @@ export async function POST(req: NextRequest) {
     const profile = profileId ? getProfile(profileId) : undefined;
     const systemPrompt = profile?.analysisSystemPrompt || DEFAULT_SYSTEM_PROMPT;
 
+    // Download the image and convert to base64 data URL so OpenAI doesn't
+    // need to fetch from fal.media (temp URLs can expire / return 400).
+    let imagePayload: string = image_url;
+    try {
+      const imgRes = await fetch(image_url);
+      if (imgRes.ok) {
+        const buf = Buffer.from(await imgRes.arrayBuffer());
+        const contentType = imgRes.headers.get("content-type") || "image/png";
+        imagePayload = `data:${contentType};base64,${buf.toString("base64")}`;
+      } else {
+        console.warn("[analyze-product] Could not download image, falling back to URL reference:", imgRes.status);
+      }
+    } catch (dlErr) {
+      console.warn("[analyze-product] Image download failed, falling back to URL reference:", dlErr);
+    }
+
     const openai = new OpenAI({ apiKey });
 
     const response = await openai.chat.completions.create({
@@ -44,7 +60,7 @@ export async function POST(req: NextRequest) {
           content: [
             {
               type: "image_url",
-              image_url: { url: image_url, detail: "high" },
+              image_url: { url: imagePayload, detail: "high" },
             },
             {
               type: "text",

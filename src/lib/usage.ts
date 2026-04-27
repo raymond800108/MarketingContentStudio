@@ -59,7 +59,7 @@ export const PRICE_TABLE: Record<
   ApiAction,
   { service: ApiService; model: string; costUsd: number }
 > = {
-  "image-generate":      { service: "kie",     model: "nano-banana-2", costUsd: 0.20 },   // raw $0.04 × 5
+  "image-generate":      { service: "openai",  model: "gpt-image-2",   costUsd: 0.40 },   // gpt-image-2 raw ~$0.08 × 5 margin
   "video-generate":      { service: "kie",     model: "kling-3.0",    costUsd: 2.00 },   // raw $0.40 × 5; UGC overrides per-model
   "product-analysis":    { service: "openai",  model: "gpt-4o",       costUsd: 0.15 },   // raw $0.03 × 5
   "caption-generate":    { service: "openai",  model: "gpt-4o",       costUsd: 0.10 },   // raw $0.02 × 5

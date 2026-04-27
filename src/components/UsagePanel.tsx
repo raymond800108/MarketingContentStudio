@@ -115,6 +115,26 @@ export default function UsagePanel({
   const [confirmClear, setConfirmClear] = useState(false);
   const [visibleCount, setVisibleCount] = useState(20);
   const [selectedUser, setSelectedUser] = useState<string>("all");
+  const [deletingUser, setDeletingUser] = useState<string | null>(null);
+
+  const handleDeleteUser = async (email: string) => {
+    if (deletingUser === email) {
+      // Second click = confirm
+      try {
+        const res = await fetch(`/api/usage?scope=user&email=${encodeURIComponent(email)}`, { method: "DELETE" });
+        if (!res.ok) throw new Error("Delete failed");
+        onRefresh();
+      } catch (err) {
+        console.error("Failed to delete user usage:", err);
+      } finally {
+        setDeletingUser(null);
+      }
+    } else {
+      setDeletingUser(email);
+      // Auto-cancel after 3s
+      setTimeout(() => setDeletingUser((prev) => (prev === email ? null : prev)), 3000);
+    }
+  };
 
   // ── Derived data ──
 
@@ -390,6 +410,7 @@ export default function UsagePanel({
                     <th className="text-right px-4 py-3 text-[10px] uppercase font-semibold tracking-wider text-muted">API Cost</th>
                     <th className="text-right px-4 py-3 text-[10px] uppercase font-semibold tracking-wider text-muted">Success</th>
                     <th className="text-right px-4 py-3 text-[10px] uppercase font-semibold tracking-wider text-muted">Errors</th>
+                    <th className="w-10 px-2 py-3"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -425,6 +446,19 @@ export default function UsagePanel({
                         <td className="text-right px-4 py-3 text-muted">${cost.toFixed(2)}</td>
                         <td className="text-right px-4 py-3 text-emerald-600">{u.successCalls ?? 0}</td>
                         <td className="text-right px-4 py-3 text-red-500">{u.errorCalls ?? 0}</td>
+                        <td className="px-2 py-3 text-center">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleDeleteUser(u.email); }}
+                            className={`p-1 rounded-md transition-colors ${
+                              deletingUser === u.email
+                                ? "bg-red-500/20 text-red-500"
+                                : "text-muted hover:text-red-500 hover:bg-red-500/10"
+                            }`}
+                            title={deletingUser === u.email ? "Click again to confirm" : "Delete user usage"}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </td>
                       </tr>
                     );
                   })}
@@ -437,6 +471,7 @@ export default function UsagePanel({
                       <td className="text-right px-4 py-3">${summary.totalCostUsd.toFixed(2)}</td>
                       <td className="text-right px-4 py-3 text-emerald-600">{summary.successCalls}</td>
                       <td className="text-right px-4 py-3 text-red-500">{summary.errorCalls}</td>
+                      <td></td>
                     </tr>
                   )}
                 </tbody>

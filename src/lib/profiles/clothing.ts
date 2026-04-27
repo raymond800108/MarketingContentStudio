@@ -59,92 +59,143 @@ export const clothing: ProductProfile = {
 Return ONLY valid JSON, no markdown.`,
 
   templates: [
+    // ── Travel environment themes ─────────────────────────────────
+    // All scene-based templates below place the model in a realistic
+    // commuting / travel environment: airport, train, car, hotel, etc.
+    // These are the primary creative themes for this profile.
+    {
+      id: "airport-departure",
+      name: "Airport Departure",
+      icon: "\u{2708}\uFE0F",
+      prompt:
+        "Editorial travel shot inside a modern international airport terminal. Model wearing the garment, walking confidently through the departures hall with a leather carry-on and passport in hand, floor-to-ceiling windows revealing parked aircraft in the background, soft diffused morning light, clean minimalist architecture, cinematic travel magazine mood, shallow depth of field. The garment is the hero of the shot.",
+      description: "Modern airport departures hall with carry-on luggage",
+      dynamic: true,
+    },
+    {
+      id: "airport-lounge",
+      name: "First-Class Lounge",
+      icon: "\u{1F6CB}\uFE0F",
+      prompt:
+        "Luxury first-class airport lounge interior — model wearing the garment, seated elegantly on a leather lounge chair by the panoramic window with a coffee and a travel magazine, warm ambient lighting, marble floor, minimalist premium decor, editorial travel photography, blurred runway background. The clothing is clearly visible and styled as travel-chic.",
+      description: "Premium airport lounge with travel-chic styling",
+      dynamic: true,
+    },
+    {
+      id: "train-window",
+      name: "Train Window Seat",
+      icon: "\u{1F686}",
+      prompt:
+        "Cinematic shot inside a modern European high-speed train carriage. Model wearing the garment, seated by the window looking out at passing countryside, soft natural daylight streaming through the window, warm golden cast, shallow depth of field with motion blur in the background landscape, nostalgic travel journal mood. The full outfit is clearly visible.",
+      description: "Window seat on a high-speed train with passing scenery",
+      dynamic: true,
+    },
+    {
+      id: "train-platform",
+      name: "Train Platform",
+      icon: "\u{1F687}",
+      prompt:
+        "Editorial travel shot on a grand European train station platform. Model wearing the garment, standing beside a vintage leather suitcase as a train pulls in behind, dramatic morning light breaking through the overhead glass canopy, architectural steel arches, cinematic atmosphere with mild steam/mist, travel magazine editorial.",
+      description: "Classic train station platform with vintage luggage",
+      dynamic: true,
+    },
+    {
+      id: "road-trip-car",
+      name: "Road Trip (In Car)",
+      icon: "\u{1F697}",
+      prompt:
+        "Inside the passenger seat of a premium vehicle on a scenic coastal road trip — model wearing the garment, relaxed, one arm resting on the open window frame, golden hour sunlight streaming in, wind in the hair, blurred scenic landscape outside, warm cinematic travel vlog mood. The outfit is clearly visible from a three-quarter angle.",
+      description: "Passenger seat of a premium car on a scenic drive",
+      dynamic: true,
+    },
+    {
+      id: "road-trip-exterior",
+      name: "Road Trip (By Car)",
+      icon: "\u{1F30D}",
+      prompt:
+        "Cinematic road trip editorial — model wearing the garment, leaning casually against a vintage convertible parked on a scenic cliffside or desert highway pull-off, sunglasses on head, golden hour lighting, wide sweeping landscape in the background, editorial travel magazine mood, full body visible.",
+      description: "Leaning against a car on a scenic cliffside highway",
+      dynamic: true,
+    },
+    {
+      id: "hotel-arrival",
+      name: "Hotel Arrival",
+      icon: "\u{1F3E8}",
+      prompt:
+        "Boutique hotel lobby arrival scene — model wearing the garment, standing at a marble reception desk with designer luggage beside them, warm ambient chandelier lighting, lush potted plants and brass fixtures, travel editorial photography, the full outfit clearly visible as the model checks in.",
+      description: "Boutique hotel lobby check-in with luggage",
+      dynamic: true,
+    },
+    {
+      id: "hotel-balcony",
+      name: "Hotel Balcony View",
+      icon: "\u{1F30A}",
+      prompt:
+        "Luxury hotel room balcony with a panoramic ocean or city skyline view — model wearing the garment, leaning on the balcony railing with a morning coffee, soft sunrise light, flowing curtains behind, cinematic destination travel mood, shallow depth of field, the outfit fully visible from the front.",
+      description: "Luxury balcony with ocean or skyline view",
+      dynamic: true,
+    },
+    {
+      id: "taxi-window",
+      name: "City Taxi",
+      icon: "\u{1F699}",
+      prompt:
+        "Inside a yellow taxi or black cab in a major city — model wearing the garment, seated in the back with phone in hand, neon city lights and wet streets reflected through the window at night, cinematic urban travel mood, shallow depth of field, street lights creating bokeh behind.",
+      description: "Back seat of a city taxi at night with neon reflections",
+      dynamic: true,
+    },
+    {
+      id: "street-cafe-travel",
+      name: "Cafe Stopover",
+      icon: "\u{2615}",
+      prompt:
+        "Charming European street cafe during a travel stopover — model wearing the garment, seated at a small outdoor table with a map and an espresso, cobblestone street visible, warm afternoon sunlight, travel blog editorial mood, the full outfit clearly visible.",
+      description: "European street cafe stopover with map and espresso",
+      dynamic: true,
+    },
+    {
+      id: "consistent-model",
+      name: "Consistent Model (Travel)",
+      icon: "\u{1F464}",
+      prompt:
+        "Same travelling model across your entire lookbook — upload character reference images and the same person will appear across every travel scene, preserving their face and identity.",
+      description: "Same model across all travel looks — upload character reference",
+      dynamic: true,
+    },
+    // ── Classic product-focused templates (kept for e-commerce) ────
+    // These are the non-travel shots every clothing brand still needs:
+    // flat-lay, on-hanger, ghost-mannequin, and macro detail.
     {
       id: "flat-lay",
       name: "Flat Lay",
       icon: "\u{1F4D0}",
-      prompt: "Perfectly styled flat lay on clean white surface, the garment neatly arranged with crisp folds, top-down overhead shot, soft even lighting, e-commerce ready product photography",
-      description: "Overhead flat lay on clean surface with styled arrangement",
+      prompt:
+        "Perfectly styled flat lay on clean white surface, the garment neatly arranged with crisp folds alongside travel essentials like passport and sunglasses, top-down overhead shot, soft even lighting, e-commerce ready product photography.",
+      description: "Overhead flat lay styled with travel essentials",
     },
     {
       id: "on-hanger",
       name: "On Hanger Studio",
       icon: "\u{1F9F5}",
-      prompt: "Garment displayed on a premium wooden or velvet hanger against a clean studio backdrop, showing the full silhouette and drape, professional catalog photography",
+      prompt:
+        "Garment displayed on a premium wooden or velvet hanger against a clean studio backdrop, showing the full silhouette and drape, professional catalog photography.",
       description: "Displayed on premium hanger showing full silhouette",
     },
     {
       id: "ghost-mannequin",
       name: "Ghost Mannequin",
       icon: "\u{1F47B}",
-      prompt: "Invisible mannequin photography — the garment appears to be worn by an invisible figure, showing 3D shape and fit without a model, clean white background, professional e-commerce style",
+      prompt:
+        "Invisible mannequin photography — the garment appears to be worn by an invisible figure, showing 3D shape and fit without a model, clean white background, professional e-commerce style.",
       description: "Invisible mannequin showing 3D shape without a model",
-    },
-    {
-      id: "street-style",
-      name: "Street Style",
-      icon: "\u{1F3D9}\uFE0F",
-      prompt: "Urban street style editorial — model wearing the garment in a city setting, candid confident pose, natural daylight, blurred urban background, fashion blogger aesthetic",
-      description: "Urban editorial with model in city setting, candid style",
-    },
-    {
-      id: "editorial-model",
-      name: "Editorial Model",
-      icon: "\u{1F4F7}",
-      prompt: "High-fashion editorial shoot — professional model wearing the garment, dramatic pose, studio or curated setting, fashion magazine quality, the clothing as the hero",
-      description: "High-fashion editorial with professional model",
-      dynamic: true,
-    },
-    {
-      id: "consistent-model",
-      name: "Consistent Model",
-      icon: "\u{1F464}",
-      prompt: "Same model character wears all your clothing — upload character reference images for consistent identity across lookbook",
-      description: "Same model across all looks — upload character reference",
-      dynamic: true,
     },
     {
       id: "detail-texture",
       name: "Detail & Texture",
       icon: "\u{1F50D}",
-      prompt: "Extreme close-up on fabric texture, stitching details, buttons, zippers, or embroidery, macro photography revealing craftsmanship, shallow depth of field",
+      prompt:
+        "Extreme close-up on fabric texture, stitching details, buttons, zippers, or embroidery, macro photography revealing craftsmanship, shallow depth of field.",
       description: "Macro close-up on fabric texture, stitching and details",
-    },
-    {
-      id: "lifestyle-casual",
-      name: "Lifestyle Casual",
-      icon: "\u2615",
-      prompt: "Relaxed lifestyle setting — model wearing the garment in a cozy cafe, sunlit apartment, or garden, warm authentic atmosphere, natural photography feel",
-      description: "Relaxed lifestyle setting with warm, authentic atmosphere",
-    },
-    {
-      id: "lookbook-studio",
-      name: "Lookbook Studio",
-      icon: "\u{1F4D6}",
-      prompt: "Clean lookbook studio shot — model standing on seamless backdrop, full body visible, neutral pose showing the garment clearly, even studio lighting, brand lookbook style",
-      description: "Clean studio lookbook shot showing full garment on model",
-    },
-    {
-      id: "seasonal-outdoor",
-      name: "Seasonal Outdoor",
-      icon: "\u{1F342}",
-      prompt: "Seasonal outdoor editorial — model wearing the garment in nature setting matching the season, golden hour lighting, cinematic depth, editorial fashion photography",
-      description: "Seasonal outdoor setting with golden hour lighting",
-    },
-    {
-      id: "mix-match",
-      name: "Mix & Match",
-      icon: "\u{1F3A8}",
-      prompt: "Styled outfit combination — the garment paired with complementary pieces, showing how to wear it, multiple items visible, fashion styling inspiration",
-      description: "Styled outfit pairing showing how to wear the piece",
-    },
-    {
-      id: "ugc-model",
-      name: "UGC Style",
-      icon: "\u{1F4F1}",
-      prompt: "User-generated content style — casual selfie-like photo wearing the garment, natural lighting, authentic feel, Instagram-worthy but not overly polished",
-      description: "Authentic UGC-style for social media campaigns",
-      dynamic: true,
     },
   ],
 
@@ -183,8 +234,8 @@ Return ONLY valid JSON, no markdown.`,
     "Copy their appearance from the reference photos as precisely as a portrait photographer would.",
 
   sizeConfig: {
-    label: "Garment size",
-    placeholder: "e.g. M or chest 100",
+    label: "studio.sizeLabel.garment",
+    placeholder: "studio.sizePlaceholder.garment",
     getSizePrompt: getClothingSizePrompt,
   },
 

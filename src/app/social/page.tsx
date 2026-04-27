@@ -33,7 +33,7 @@ import {
   Search,
 } from "lucide-react";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { useT, useI18nStore } from "@/lib/i18n";
+import { useT, useTMaybe, useI18nStore } from "@/lib/i18n";
 import { trackApiCall } from "@/lib/stores/api-usage-store";
 import { useAuth } from "@/lib/useAuth";
 
@@ -153,6 +153,7 @@ type DragPayload = DragContentPayload | DragMovePayload;
 
 export default function SocialPage() {
   const t = useT();
+  const tm = useTMaybe();
   const locale = useI18nStore((s) => s.locale);
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
@@ -818,39 +819,11 @@ export default function SocialPage() {
             <p className="text-[10px] text-muted mt-2 text-center">{t("social.dragHint")}</p>
           </div>
 
-          {/* Export Presets */}
+          {/* Export Presets
+              (Account bundle switcher was removed — each post now picks its
+              target account individually inside the Edit Post modal.) */}
           {profile && (
             <div className="rounded-2xl border border-border bg-card p-4">
-              {/* ── Account bundle switcher (top-left) ──
-                  • Admin: dropdown to pick any bundled accountId
-                  • Non-admin with a bound account: read-only badge
-                  • Non-admin without a bound account: nothing shown */}
-              {isAdmin ? (
-                <div className="relative mb-3 w-full">
-                  <select
-                    value={defaultAccountId}
-                    onChange={(e) => setDefaultAccountId(e.target.value)}
-                    title={`Account ID: ${defaultAccountId}`}
-                    className="appearance-none w-full pl-3 pr-8 py-2 text-xs font-medium rounded-xl border border-border bg-background text-foreground focus:outline-none focus:border-accent/30 cursor-pointer"
-                  >
-                    {ACCOUNT_BUNDLES.map((bundle) => (
-                      <option key={bundle.id} value={bundle.id}>
-                        {bundle.label}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronRight className="w-3 h-3 absolute right-2.5 top-1/2 -translate-y-1/2 text-muted pointer-events-none rotate-90" />
-                </div>
-              ) : boundAccountLabel ? (
-                <div
-                  title={`Account ID: ${boundAccountId}`}
-                  className="flex items-center gap-1.5 mb-3 w-full px-3 py-2 text-xs font-medium rounded-xl border border-border bg-background text-foreground"
-                >
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                  {boundAccountLabel}
-                </div>
-              ) : null}
-
               <h2 className="text-xs font-semibold uppercase tracking-wider text-muted mb-3 flex items-center gap-2">
                 <Globe className="w-3.5 h-3.5" /> {t("social.exportPreset")}
               </h2>
@@ -1060,29 +1033,135 @@ export default function SocialPage() {
                 placeholder={t("social.captionPlaceholder")} />
             </div>
 
-            {/* Account selector */}
-            {connected && accounts.length > 0 && (
+            {/* Export preset selector — per-post platform target (Instagram
+                Post / Story / Reels / TikTok / Facebook, etc.). Uses the
+                active profile's socialPresets list. */}
+            {profile && profile.socialPresets.length > 0 && (
               <div>
-                <label className="text-xs font-medium mb-1 block">{t("social.publishTo")}</label>
-                <select value={editingPost.accountId || ""}
+                <label className="text-xs font-medium mb-1 block">
+                  {tm("social.exportPreset", "Export Preset")}
+                </label>
+                <select
+                  value={editingPost.presetId || ""}
                   onChange={(e) => {
-                    const acc = accounts.find((a) => a.id === e.target.value);
+                    const id = e.target.value || null;
+                    const preset = id
+                      ? profile.socialPresets.find((p) => p.id === id)
+                      : null;
+                    const nextLabel = preset
+                      ? `${preset.platform} ${preset.label}`
+                      : null;
+                    const nextPlatform = preset
+                      ? preset.platform.toLowerCase()
+                      : editingPost.platform;
                     updatePost(editingPost.id, {
-                      accountId: e.target.value || null,
-                      platform: acc?.platform || editingPost.platform,
+                      presetId: id,
+                      presetLabel: nextLabel,
+                      platform: nextPlatform,
                     });
-                    setEditingPost({ ...editingPost, accountId: e.target.value || null, platform: acc?.platform || editingPost.platform });
+                    setEditingPost({
+                      ...editingPost,
+                      presetId: id,
+                      presetLabel: nextLabel,
+                      platform: nextPlatform,
+                    });
                   }}
-                  className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-accent/30">
-                  <option value="">{t("social.selectAccount")}</option>
-                  {accounts.map((acc) => (
-                    <option key={acc.id} value={acc.id}>
-                      {PLATFORM_LABELS[acc.platform] || acc.platform} &mdash; @{acc.username}
+                  className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-accent/30"
+                >
+                  <option value="">
+                    {tm("social.noPreset", "No preset")}
+                  </option>
+                  {profile.socialPresets.map((preset) => (
+                    <option key={preset.id} value={preset.id}>
+                      {PLATFORM_ICONS[preset.platform.toLowerCase()] || "🌐"}{" "}
+                      {preset.platform} {preset.label} — {preset.width}×{preset.height} ({preset.aspectRatio})
                     </option>
                   ))}
                 </select>
+                {editingPost.presetLabel && (
+                  <p className="text-[10px] text-muted mt-1">
+                    {tm("social.publishingAs", "Publishing as")}: {editingPost.presetLabel}
+                  </p>
+                )}
               </div>
             )}
+
+            {/* Account selector — per-post bundle assignment.
+                - Admin: picks from all ACCOUNT_BUNDLES.
+                - Non-admin with a boundAccountId: their only account is shown
+                  and auto-assigned (they can't switch). */}
+            {(() => {
+              // Figure out which bundles this user can post to.
+              const availableBundles = isAdmin
+                ? ACCOUNT_BUNDLES
+                : boundAccountId
+                ? ACCOUNT_BUNDLES.filter((b) => b.id === boundAccountId)
+                : [];
+
+              // Auto-assign the single bound account on open so the post is
+              // always linked without requiring user action.
+              if (
+                !isAdmin &&
+                boundAccountId &&
+                editingPost.accountId !== boundAccountId
+              ) {
+                const live = accounts.find((a) => a.id === boundAccountId);
+                const nextPlatform = live?.platform || editingPost.platform;
+                // Defer to avoid setState-in-render; happens once per modal open.
+                setTimeout(() => {
+                  updatePost(editingPost.id, {
+                    accountId: boundAccountId,
+                    platform: nextPlatform,
+                  });
+                  setEditingPost((prev) =>
+                    prev ? { ...prev, accountId: boundAccountId, platform: nextPlatform } : prev
+                  );
+                }, 0);
+              }
+
+              if (availableBundles.length === 0) return null;
+
+              const singleLocked = !isAdmin && availableBundles.length === 1;
+
+              return (
+                <div>
+                  <label className="text-xs font-medium mb-1 block">{t("social.publishTo")}</label>
+                  <select
+                    value={editingPost.accountId || ""}
+                    disabled={singleLocked}
+                    onChange={(e) => {
+                      const newId = e.target.value || null;
+                      const live = newId ? accounts.find((a) => a.id === newId) : null;
+                      const nextPlatform = live?.platform || editingPost.platform;
+                      updatePost(editingPost.id, {
+                        accountId: newId,
+                        platform: nextPlatform,
+                      });
+                      setEditingPost({ ...editingPost, accountId: newId, platform: nextPlatform });
+                    }}
+                    className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-accent/30 disabled:opacity-70 disabled:cursor-not-allowed"
+                  >
+                    {isAdmin && <option value="">{t("social.selectAccount")}</option>}
+                    {availableBundles.map((bundle) => {
+                      const live = accounts.find((a) => a.id === bundle.id);
+                      return (
+                        <option key={bundle.id} value={bundle.id}>
+                          {bundle.label}
+                          {live ? ` — @${live.username}` : ""}
+                        </option>
+                      );
+                    })}
+                  </select>
+                  <p className="text-[10px] text-muted mt-1">
+                    {singleLocked
+                      ? `Your account: ${editingPost.accountId || boundAccountId}`
+                      : editingPost.accountId
+                      ? `Account ID: ${editingPost.accountId}`
+                      : t("social.selectAccount")}
+                  </p>
+                </div>
+              );
+            })()}
 
             {publishError && (
               <p className="text-xs text-danger flex items-center gap-1"><AlertCircle className="w-3 h-3" />{publishError}</p>

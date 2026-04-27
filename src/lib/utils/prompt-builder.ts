@@ -75,34 +75,44 @@ export function buildVideoPrompt(
 
   if (profile.id === "furniture") {
     return (
-      "Animate this reference image into a cinematic interior design video. " +
-      "Slow camera pan revealing the furniture from multiple angles. " +
+      "Use the reference image as the starting frame. " +
+      "Keep a wide to medium shot throughout — do NOT zoom in on details. " +
+      "The camera slowly pans around the furniture, revealing it from multiple angles. " +
       `The piece is a ${productType} placed ${placement}. ` +
       sizeNote +
-      "Preserve exact materials, colors, and room setting throughout. " +
-      "Smooth motion, natural lighting, architectural photography mood."
+      "Smooth cinematic motion, natural lighting, architectural photography mood. " +
+      "Preserve exact materials, colors, and room setting from the reference image."
     );
   }
 
   if (profile.id === "clothing") {
     return (
-      "Animate this reference image into a cinematic fashion campaign video. " +
-      "The model walks naturally, showing the garment's movement and drape. " +
-      `They are wearing a ${productType}. ` +
+      "Use the reference image as the starting frame. " +
+      "Keep a medium to full-body shot throughout — do NOT zoom in on details. " +
+      "The model begins from the pose in the image, then starts moving casually and naturally: " +
+      "taking a few relaxed steps, turning around slowly, lightly adjusting the garment, " +
+      "letting the fabric flow and drape with each movement. " +
+      `The model is wearing a ${productType}. ` +
       sizeNote +
-      "Preserve exact face, body, and garment throughout. " +
-      "Smooth elegant motion, editorial lighting, fashion video mood."
+      "The camera follows smoothly at a consistent distance, like a real clothing commercial. " +
+      "Show the full outfit and silhouette in every frame. " +
+      "Warm editorial lighting, shallow depth of field, luxury fashion ad mood. " +
+      "Preserve the exact person, garment, and setting from the reference image."
     );
   }
 
   // Default (jewelry and others)
   return (
-    "Animate this reference image into a cinematic luxury campaign video. " +
-    "The model slowly turns to showcase the product from multiple angles. " +
-    `They are wearing a ${productType} ${placement}. ` +
+    "Use the reference image as the starting frame. " +
+    "Keep a medium shot throughout — do NOT zoom in on details. " +
+    "The model begins from the pose in the image, then moves casually: " +
+    "turning gently, shifting weight, lightly touching or adjusting the product, " +
+    "showcasing it naturally from different angles. " +
+    `The model is wearing a ${productType} ${placement}. ` +
     sizeNote +
-    "Preserve exact face, outfit, and product throughout. " +
-    "Smooth elegant motion, studio lighting, shallow depth of field, luxurious mood."
+    "The camera follows smoothly at a consistent distance, like a luxury product commercial. " +
+    "Studio lighting, shallow depth of field, elegant mood. " +
+    "Preserve the exact person, outfit, product, and setting from the reference image."
   );
 }
 

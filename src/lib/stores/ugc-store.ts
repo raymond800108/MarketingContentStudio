@@ -48,12 +48,36 @@ export type CreatorRace =
   | "latino"
   | "middle-eastern"
   | "any";
+export type CreatorHairColor =
+  | "any"
+  | "black"
+  | "dark-brown"
+  | "brown"
+  | "light-brown"
+  | "blonde"
+  | "red"
+  | "auburn"
+  | "grey"
+  | "white"
+  | "colored"; // pink/blue/pastel/etc.
+export type CreatorEyeColor =
+  | "any"
+  | "dark-brown"
+  | "brown"
+  | "hazel"
+  | "green"
+  | "blue"
+  | "grey";
 
 export interface CreatorOverrides {
   /** Approximate age or age band, e.g. "24", "early 30s", "late 20s". */
   age: string;
   gender: CreatorGender;
   race: CreatorRace;
+  /** Hair color — "any" means defer to archetype description. */
+  hairColor?: CreatorHairColor;
+  /** Eye color — "any" means defer to archetype description. */
+  eyeColor?: CreatorEyeColor;
 }
 
 /**
@@ -74,7 +98,7 @@ export interface Keyframe {
   label: string;
   /** The prompt we sent to image gen — stored for regen. */
   prompt: string;
-  /** Which reference images to pass into nano-banana-2 for THIS frame.
+  /** Which reference images to pass into gpt-image-2 for THIS frame.
    *  E.g. Creator + Product frames get [productImageUrl]; Scene frame gets []
    *  because passing the product image into a "no people / no product"
    *  scene plate causes Kie to reject. Defaults to [productImageUrl] when
@@ -86,6 +110,10 @@ export interface Keyframe {
   imageUrl?: string;
   status: "idle" | "pending" | "ready" | "error";
   error?: string;
+  /** UGC v2 — what the character says during this frame. Included in the
+   *  final Seedance prompt (with [ImageN] token) so generate_audio produces
+   *  the right voice + rough mouth sync. Only meaningful for UGC family. */
+  dialogue?: string;
 }
 
 /**
@@ -113,6 +141,40 @@ export interface CreativeAngle {
   /** Short on-screen text phrases for text-overlay mode (3-4 punchy lines).
    *  Only populated when voiceMode === "text-overlay". */
   overlayTexts?: string[];
+  /** ── UGC v2 two-keyframe workflow (Seedance first_frame + last_frame mode) ──
+   *  These fields are optional and only populated for the UGC family. They let
+   *  the Seedance keyframe-anchored pipeline produce consistent visuals with
+   *  per-frame spoken dialogue. Commercial/Cinematic families leave these blank. */
+  /** Visual description of what the OPENING frame shows. */
+  openingBeat?: string;
+  /** Visual description of what the CLOSING frame shows. */
+  closingBeat?: string;
+  /** What the character says at/during the opening frame (~1-2 sentences). */
+  openingLine?: string;
+  /** What the character says at/during the closing frame (~1-2 sentences). */
+  closingLine?: string;
+  /** Motion / action happening between the two keyframes.
+   *  Back-compat single-string representation; prefer motions[] for new code. */
+  motionPrompt?: string;
+  /** Per-segment motion directives (continuous-verb style).
+   *  - 2-frame (5s): 1 motion for the single 0→1 segment.
+   *  - 3-frame (10s): 2 motions — motions[0]=seg1 (0→1), motions[1]=seg2 (1→2). */
+  motions?: string[];
+  /** 3-beat shot grammar for professional-commercial pacing.
+   *  hook=0-1s arrest, promise=mid-clip demo, payoff=final CTA. */
+  shotGrammar?: {
+    hook?: string;
+    promise?: string;
+    payoff?: string;
+  };
+  /** ── UGC v2 3-frame 10s mode ── */
+  /** Visual description of the MID frame (pivot — pixel-locked seam). */
+  midBeat?: string;
+  /** ── DEPRECATED: UGC v2 4-frame 10s mode (superseded by 3-frame) ── */
+  frame2Beat?: string;
+  frame3Beat?: string;
+  frame2Line?: string;
+  frame3Line?: string;
 }
 
 export interface CreativeBrief {
@@ -127,6 +189,21 @@ export interface CreativeBrief {
    *  For Seedance, uses [Image1/2/3] bracket tokens. */
   videoPrompt?: string;
   durationSec: number; // target video length (typically 8)
+  /** Shared scene-lock block — prepended identically to every keyframe prompt
+   *  so gpt-image-2 stays in the same physical scene (camera/lighting/grade/
+   *  outfit/environment). Biggest single lever against frame-to-frame drift. */
+  sceneLock?: {
+    /** Verbatim physical description of the creator — age, ethnicity, face
+     *  shape, eye description, skin tone, hair (length/color/texture/style),
+     *  any distinctive features. Prepended first in every keyframe prompt as
+     *  the single authoritative identity anchor. */
+    creator?: string;
+    camera?: string;
+    lighting?: string;
+    colorGrade?: string;
+    environment?: string;
+    outfit?: string;
+  };
 }
 
 /**
@@ -192,6 +269,10 @@ interface UgcStore {
   endFrameUrl: string | null;
   videoModel: VideoModel;
   voiceMode: VoiceMode;
+  /** UGC v2 only — target clip length in seconds.
+   *    5  → 2 anchored frames, 1 Seedance call, single clip
+   *   10  → 4 anchored frames, 2 parallel Seedance calls, stitched together */
+  clipLength: 5 | 10;
   input: UgcInput;
   brief: CreativeBrief | null;
   keyframes: Keyframe[];
@@ -213,6 +294,7 @@ interface UgcStore {
   setEndFrameUrl: (url: string | null) => void;
   setVideoModel: (m: VideoModel) => void;
   setVoiceMode: (m: VoiceMode) => void;
+  setClipLength: (sec: 5 | 10) => void;
   setInput: (patch: Partial<UgcInput>) => void;
   setBrief: (brief: CreativeBrief | null) => void;
   setSelectedAngle: (i: number) => void;
@@ -228,6 +310,8 @@ const INITIAL_CREATOR_OVERRIDES: CreatorOverrides = {
   age: "",
   gender: "any",
   race: "any",
+  hairColor: "any",
+  eyeColor: "any",
 };
 
 const INITIAL_INPUT: UgcInput = {
@@ -249,6 +333,7 @@ export const useUgcStore = create<UgcStore>()(
       endFrameUrl: null,
       videoModel: "seedance-2-fast",
       voiceMode: "voiceover",
+      clipLength: 5,
       input: INITIAL_INPUT,
       brief: null,
       keyframes: [],
@@ -270,6 +355,7 @@ export const useUgcStore = create<UgcStore>()(
       setProductImageUrl: (productImageUrl) => set({ productImageUrl }),
       setEndFrameUrl: (endFrameUrl) => set({ endFrameUrl }),
       setVideoModel: (videoModel) => set({ videoModel }),
+      setClipLength: (clipLength) => set({ clipLength }),
       setVoiceMode: (voiceMode) => set({ voiceMode }),
       setInput: (patch) => set((s) => ({ input: { ...s.input, ...patch } })),
       setBrief: (brief) => set({ brief }),
@@ -294,6 +380,7 @@ export const useUgcStore = create<UgcStore>()(
           endFrameUrl: null,
           videoModel: "seedance-2-fast",
           voiceMode: "voiceover",
+          clipLength: 5,
           input: INITIAL_INPUT,
           brief: null,
           keyframes: [],

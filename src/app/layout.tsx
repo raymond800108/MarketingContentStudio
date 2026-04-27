@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
+import AuthProvider from "@/components/AuthProvider";
+import SchedulerProvider from "@/components/SchedulerProvider";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -19,7 +21,20 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${inter.variable} h-full antialiased`}>
-      <body className="min-h-full flex flex-col font-sans">{children}</body>
+      <head>
+        {/* Google Fonts for the Ad Headline font picker previews */}
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Bodoni+Moda:wght@400;700&family=Cormorant+Garamond:wght@300;400;600&family=EB+Garamond:wght@400;600&family=GFS+Didot&family=Montserrat:wght@400;600;800&family=PT+Serif:wght@400;700&family=Source+Serif+Pro:wght@400;600&family=Jost:wght@400;500&display=swap"
+        />
+      </head>
+      <body className="min-h-full flex flex-col font-sans">
+        <AuthProvider>
+          <SchedulerProvider>{children}</SchedulerProvider>
+        </AuthProvider>
+      </body>
     </html>
   );
 }

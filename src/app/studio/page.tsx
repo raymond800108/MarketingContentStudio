@@ -25,6 +25,10 @@ import {
 import TemplatePreview from "@/components/studio/TemplatePreview";
 import { useT, useTMaybe } from "@/lib/i18n";
 import { trackApiCall, calcVideoCost } from "@/lib/stores/api-usage-store";
+import LuxuryOverlayInput from "@/components/LuxuryOverlayInput";
+import { buildAdOverlayPrompt } from "@/lib/ad-overlay-prompt";
+import { getAdFont } from "@/lib/ad-fonts";
+import { compressImageForUpload } from "@/lib/image-compress";
 
 interface SourceImage {
   id: string;
@@ -46,6 +50,8 @@ export default function StudioPage() {
     selectedTemplate, setSelectedTemplate,
     productDimension, setProductDimension,
     bottleIngredients, setBottleIngredients,
+    overlayText, setOverlayText,
+    overlayFontId, setOverlayFontId,
   } = useUIStore();
 
   const generatedImages = useGenerationStore((s) => s.generatedImages);
@@ -211,6 +217,13 @@ export default function StudioPage() {
       return null;
     }
 
+    // Compress before upload so we stay under Vercel's 4.5 MB function-body cap.
+    try {
+      file = await compressImageForUpload(file);
+    } catch (compressErr) {
+      console.warn("[studio] compression failed, using original:", compressErr);
+    }
+
     const formData = new FormData();
     formData.append("file", file);
     try {
@@ -316,6 +329,8 @@ export default function StudioPage() {
                 timestamp: Date.now(),
               });
             } else if ((pd.images as { url: string }[] | undefined)?.length) {
+              // Overlay text (if any) was injected into the generation prompt,
+              // so the image already has the text baked in by the model.
               const imgs = (pd.images as { url: string }[]).map((img) => ({
                 url: img.url,
                 sourceId,
@@ -334,12 +349,18 @@ export default function StudioPage() {
               }
             }
             pendingCount--;
-            if (pendingCount <= 0) useGenerationStore.getState().setLoading(false);
+            if (pendingCount <= 0) {
+              useGenerationStore.getState().setLoading(false);
+              setLoading(false);
+            }
           },
           onError: (err) => {
             useGenerationStore.getState().setError(err);
             pendingCount--;
-            if (pendingCount <= 0) useGenerationStore.getState().setLoading(false);
+            if (pendingCount <= 0) {
+              useGenerationStore.getState().setLoading(false);
+              setLoading(false);
+            }
           },
         },
       });
@@ -355,11 +376,14 @@ export default function StudioPage() {
 
         if (isVideo) {
           // Video mode — use refined prompt if available, otherwise raw idea or fallback
-          const prompt = refinedPrompt.trim()
+          const basePrompt = refinedPrompt.trim()
             ? refinedPrompt
             : videoIdea.trim()
               ? videoIdea
               : "Cinematic product showcase video. Slow orbiting camera movement around the product, beautiful lighting, shallow depth of field with soft bokeh background, the product gently rotating to reveal all angles, professional commercial quality.";
+          const fontPromptPhrase = getAdFont(overlayFontId).prompt;
+          const adStyleSuffix = buildAdOverlayPrompt(overlayText, true, fontPromptPhrase);
+          const prompt = adStyleSuffix ? `${basePrompt}\n\n${adStyleSuffix}` : basePrompt;
           const body: Record<string, unknown> = {
             type: "video",
             prompt,
@@ -391,14 +415,18 @@ export default function StudioPage() {
           const productContext = `The product is a ${analysis.type || "item"}: ${analysis.description || ""}. `;
           const characterDescriptor = buildCharacterDescriptor(characterGender, characterAge);
 
+          const fontPromptPhrase = getAdFont(overlayFontId).prompt;
+          const adStyleSuffix = buildAdOverlayPrompt(overlayText, false, fontPromptPhrase);
           if (profile.shotTypes.length > 0) {
             for (const shot of profile.shotTypes) {
-              const prompt = `${characterDescriptor}${sizePrompt}${ingredientsContext}${productContext}${shot.scenePrompt} ${template!.prompt}`;
+              const basePrompt = `${characterDescriptor}${sizePrompt}${ingredientsContext}${productContext}${shot.scenePrompt} ${template!.prompt}`;
+              const prompt = adStyleSuffix ? `${basePrompt}\n\n${adStyleSuffix}` : basePrompt;
               const ratio = shot.aspectRatio || aspectRatio;
               await createAndPollTask(prompt, ratio, [hostedUrl], src.id, hostedUrl);
             }
           } else {
-            const prompt = `${characterDescriptor}${sizePrompt}${ingredientsContext}${productContext}${template!.prompt}`;
+            const basePrompt = `${characterDescriptor}${sizePrompt}${ingredientsContext}${productContext}${template!.prompt}`;
+            const prompt = adStyleSuffix ? `${basePrompt}\n\n${adStyleSuffix}` : basePrompt;
             await createAndPollTask(prompt, aspectRatio, [hostedUrl], src.id, hostedUrl);
           }
         }
@@ -428,7 +456,10 @@ export default function StudioPage() {
     try {
       // Build a video prompt from the profile
       const { buildVideoPrompt } = await import("@/lib/utils/prompt-builder");
-      const prompt = buildVideoPrompt(profile, "product", "", productDimension);
+      const basePrompt = buildVideoPrompt(profile, "product", "", productDimension);
+      const fontPromptPhrase = getAdFont(overlayFontId).prompt;
+      const adStyleSuffix = buildAdOverlayPrompt(overlayText, true, fontPromptPhrase);
+      const prompt = adStyleSuffix ? `${basePrompt}\n\n${adStyleSuffix}` : basePrompt;
 
       const body = {
         type: "video",
@@ -480,10 +511,12 @@ export default function StudioPage() {
               });
             }
             genStore.setLoading(false);
+            setLoading(false);
           },
           onError: (err) => {
             useGenerationStore.getState().setError(err);
             useGenerationStore.getState().setLoading(false);
+            setLoading(false);
           },
         },
       });
@@ -701,6 +734,15 @@ export default function StudioPage() {
                   </div>
                 </div>
 
+                {/* Luxury text overlay — shared with image mode */}
+                <LuxuryOverlayInput
+                  value={overlayText}
+                  onChange={setOverlayText}
+                  fontId={overlayFontId}
+                  onFontChange={setOverlayFontId}
+                  progress={null}
+                />
+
                 {/* Generate button */}
                 <div className="flex justify-end mt-3">
                   <button
@@ -801,6 +843,15 @@ export default function StudioPage() {
                     </>
                   )}
                 </div>
+
+                {/* Luxury text overlay */}
+                <LuxuryOverlayInput
+                  value={overlayText}
+                  onChange={setOverlayText}
+                  fontId={overlayFontId}
+                  onFontChange={setOverlayFontId}
+                  progress={null}
+                />
 
                 {/* Generate button */}
                 <div className="flex justify-end mt-3">
