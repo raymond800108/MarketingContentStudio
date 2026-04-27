@@ -686,7 +686,7 @@ EXPLICITLY AVOID
           : "";
 
         const preserveList = [
-          creator     && `face (identical to Image 1: same jawline, cheekbones, eye shape and color, nose bridge, lip shape, hairline, skin tone and texture — do NOT reinvent)`,
+          creator     && `face STRUCTURE (same person as Image 1: identical jawline width, cheekbone height, eye shape and color, nose bridge, lip shape, hairline, skin tone — bone structure is locked; natural expressions and emotions ARE allowed to vary)`,
           outfit      && `outfit (${outfit})`,
           lighting    && `lighting direction and color (${lighting})`,
           colorGrade  && `color grade (${colorGrade})`,
@@ -1355,9 +1355,14 @@ EXPLICITLY AVOID
           // Overlay text (if any) was baked into the video prompt, so the
           // returned video already has the text rendered by the model.
           useUgcStore.getState().setVideo({ videoStatus: "ready", videoUrl: vidUrl });
-          // Kling videos are silent — add a soundtrack via MMAudio (Seedance
-          // already has native audio so we skip it there).
-          if (!seedance) {
+          // Add background music via MMAudio when the video has no native audio:
+          //   - Kling: always silent (sound: false)
+          //   - Seedance text-overlay: generate_audio was false
+          //   - Seedance commercial family: no voiceover, silent
+          const stForMusic = useUgcStore.getState();
+          const isTextOverlayMode =
+            stForMusic.family !== "ugc" || stForMusic.voiceMode === "text-overlay";
+          if (!seedance || isTextOverlayMode) {
             addMusicToVideo(vidUrl);
           }
           // Save to content history
