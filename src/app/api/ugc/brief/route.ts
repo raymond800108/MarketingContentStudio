@@ -676,12 +676,21 @@ Return STRICT JSON:
   ],
   "keyframePrompts": ["string", "string", "string"],
   "videoPrompt": "Base video prompt for Kling i2v — describes motion, product handling, camera, pacing. Do NOT include the spoken line — the client appends it. Under 100 words. MUST be written in the same language as the output language specified below.",
-  "durationSec": 8
+  "durationSec": 8,
+  "sceneLock": {
+    "creator": "IDENTITY ANCHOR — describe the creator's exact physical appearance so every keyframe renders the same person. Include: age as number, ethnicity, gender, face shape, eye shape+color, skin tone, nose, lips, jaw, cheekbones, eyebrow shape, hair length+color+texture+style. e.g. '26-year-old Korean woman, oval face, almond-shaped dark-brown eyes, warm honey-tan skin, straight black shoulder-length hair with curtain bangs'",
+    "camera": "focal length, height, framing",
+    "lighting": "source + direction + color temp",
+    "colorGrade": "grade name + mood",
+    "environment": "micro-details of room/location behind creator",
+    "outfit": "every garment piece + accessories"
+  }
 }
 
 ${buildAngleRules(family, archetypeId)}
 
 ${KEYFRAME_IDENTITY_RULE}
+${SCENE_LOCK_RULE}
 ${KEYFRAME_RULES_KLING[family] || KEYFRAME_RULES_KLING.ugc}
 `;
 }
@@ -1531,6 +1540,7 @@ CRITICAL: ALL text fields in the JSON — angles, scripts, keyframePrompts, AND 
       frame3Line?: string;
     }
     interface RawSceneLock {
+      creator?: string;
       camera?: string;
       lighting?: string;
       colorGrade?: string;
@@ -1670,6 +1680,7 @@ CRITICAL: ALL text fields in the JSON — angles, scripts, keyframePrompts, AND 
     // ── Parse sceneLock (shared across all keyframes) ──
     const sceneLock = parsed.sceneLock
       ? {
+          creator: parsed.sceneLock.creator ? String(parsed.sceneLock.creator) : undefined,
           camera: parsed.sceneLock.camera ? String(parsed.sceneLock.camera) : undefined,
           lighting: parsed.sceneLock.lighting ? String(parsed.sceneLock.lighting) : undefined,
           colorGrade: parsed.sceneLock.colorGrade ? String(parsed.sceneLock.colorGrade) : undefined,

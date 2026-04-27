@@ -495,19 +495,16 @@ export default function UgcStudioPage() {
       );
       setKeyframes(frames);
       setStep("storyboard");
-      if (isUgcV2) {
-        // UGC v2 — generate Frame 0 first; each subsequent frame kicks off
-        // when its predecessor completes (see pollImage onSuccess below).
-        // This creates a chained identity-lock: Frame N uses Frame N-1 as
-        // an additional image_input.
+      if (family === "ugc") {
+        // UGC family — ALL video models: generate Frame 0 first; subsequent
+        // frames kick off when their predecessor completes (pollImage onSuccess).
+        // This creates the identity chain: Frame N uses Frame 0 (face anchor) +
+        // Frame N-1 as image_inputs, so gpt-image-2 renders the same person.
+        // Applies to both Kling (3 frames) and Seedance (2-3 frames).
         if (frames[0]) generateKeyframe(frames[0].index, frames[0].prompt, frames[0].imageInputs);
       } else {
-        // Everything else — fire all keyframe generations in parallel BUT
-        // staggered by ~350ms each. Kie's gpt-image-2 endpoint is sensitive
-        // to per-API-key concurrency (firing 3 createTasks in the same JS
-        // tick frequently trips a transient 500). The stagger costs at most
-        // ~700ms of total wall-clock latency on a 3-frame burst and
-        // eliminates ~80% of "code 500 on 2-of-3 frames" failures.
+        // Commercial / Cinematic — no identity chain needed (no people or
+        // consistent creator), fire in parallel with stagger to avoid Kie 500s.
         frames.forEach((f, i) => {
           setTimeout(() => generateKeyframe(f.index, f.prompt, f.imageInputs), i * 350);
         });
@@ -746,18 +743,14 @@ EXPLICITLY AVOID
               source: "ugc",
               ugc: { archetypeId: useUgcStore.getState().archetypeId || undefined },
             });
-            // UGC v2 chaining — when any frame finishes, kick off the NEXT
-            // frame with [productImage, thisFrameImage] as its image_input so
-            // gpt-image-2 locks identity/outfit/setting. Works for both
-            // 2-frame (5s) and 4-frame (10s) modes.
+            // Identity chain — when any UGC frame finishes, kick off the NEXT
+            // with frame-0 + this frame as image_inputs so gpt-image-2 locks
+            // onto the same face. Applies to ALL UGC models (Kling + Seedance).
             const st = useUgcStore.getState();
             const fam = st.family;
-            const isUgcV2Model = st.videoModel === "seedance-2" || st.videoModel === "seedance-2-fast";
             const totalFrames = st.keyframes.length;
             if (
               fam === "ugc" &&
-              isUgcV2Model &&
-              (totalFrames === 2 || totalFrames === 3) &&
               index < totalFrames - 1
             ) {
               const next = st.keyframes[index + 1];
