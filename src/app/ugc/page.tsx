@@ -112,7 +112,13 @@ export default function UgcStudioPage() {
   // product/visual-only and do not carry any audio narration — they're
   // treated as if "text-overlay" mode is permanently on.
   const isVoiceoverFamily = family === "ugc";
-  const effectiveVoiceMode: VoiceMode = isVoiceoverFamily ? voiceMode : "text-overlay";
+  // Kling is always silent — force voiceover so TTS is always generated and
+  // shown as a separate audio player. Seedance respects the user's toggle.
+  const effectiveVoiceMode: VoiceMode = !isVoiceoverFamily
+    ? "text-overlay"
+    : !isSeedance
+    ? "voiceover"
+    : voiceMode;
   const activeAngle = getActiveAngle(brief);
   const spokenLine = activeAngle?.fullScript || "";
 
@@ -1848,31 +1854,58 @@ EXPLICITLY AVOID
             </Field>
             {/* Voice mode selector only for UGC family.
                 Commercial + Cinematic videos are silent by design (no
-                narration/voiceover), so we skip this section entirely. */}
+                narration/voiceover), so we skip this section entirely.
+                Kling videos cannot embed audio natively — voiceover plays
+                as a separate audio player; toggle is grayed out. */}
             {isVoiceoverFamily && (
               <Field label={t("ugc.voice.label")}>
-                <div className="flex gap-2">
-                  {([
-                    { id: "voiceover", key: "ugc.voice.voiceover" },
-                    { id: "text-overlay", key: "ugc.voice.textOverlay" },
-                  ] as const).map((v) => {
-                    const active = voiceMode === v.id;
-                    return (
+                {!isSeedance ? (
+                  // Kling: voiceover is always separate, toggle is locked
+                  <div className="space-y-1">
+                    <div className="flex gap-2">
                       <button
-                        key={v.id}
-                        onClick={() => setVoiceMode(v.id as VoiceMode)}
-                        className={`px-3 py-1.5 text-sm rounded-lg border ${
-                          active ? "bg-primary text-white border-primary" : "border-border hover:border-border-hover"
-                        }`}
+                        disabled
+                        className="px-3 py-1.5 text-sm rounded-lg border bg-primary text-white border-primary opacity-40 cursor-not-allowed"
                       >
-                        {t(v.key)}
+                        {t("ugc.voice.voiceover")}
                       </button>
-                    );
-                  })}
-                </div>
-                <div className="text-[11px] text-muted mt-1">
-                  {voiceMode === "text-overlay" ? t("ugc.voice.textOverlayHint") : t("ugc.voice.voiceoverHint")}
-                </div>
+                      <button
+                        disabled
+                        className="px-3 py-1.5 text-sm rounded-lg border border-border opacity-40 cursor-not-allowed"
+                      >
+                        {t("ugc.voice.textOverlay")}
+                      </button>
+                    </div>
+                    <div className="text-[11px] text-muted">
+                      Kling videos are silent — voiceover plays as a separate audio track alongside the video.
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    <div className="flex gap-2">
+                      {([
+                        { id: "voiceover", key: "ugc.voice.voiceover" },
+                        { id: "text-overlay", key: "ugc.voice.textOverlay" },
+                      ] as const).map((v) => {
+                        const active = voiceMode === v.id;
+                        return (
+                          <button
+                            key={v.id}
+                            onClick={() => setVoiceMode(v.id as VoiceMode)}
+                            className={`px-3 py-1.5 text-sm rounded-lg border ${
+                              active ? "bg-primary text-white border-primary" : "border-border hover:border-border-hover"
+                            }`}
+                          >
+                            {t(v.key)}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <div className="text-[11px] text-muted">
+                      {voiceMode === "text-overlay" ? t("ugc.voice.textOverlayHint") : t("ugc.voice.voiceoverHint")}
+                    </div>
+                  </div>
+                )}
               </Field>
             )}
 
