@@ -101,6 +101,9 @@ export default function UgcStudioPage() {
     setHeroFrameIndex,
     setVideo,
     setTts,
+    setMusic,
+    musicStatus,
+    musicError,
     reset,
   } = useUgcStore();
 
@@ -848,6 +851,7 @@ EXPLICITLY AVOID
 
     setStep("video");
     setVideo({ videoStatus: "pending", videoError: null, videoUrl: null, videoTaskId: null });
+    setMusic({ musicStatus: "idle", musicError: null, musicRequestId: null });
     // UGC v2: Seedance generates its own voice natively — no TTS needed.
     if (isUgcV2 || isTextOverlay) {
       setTts({ ttsStatus: "ready", ttsError: null, ttsUrl: null, ttsDurationSec: null });
@@ -1272,6 +1276,52 @@ EXPLICITLY AVOID
     }
   }
 
+  async function addMusicToVideo(silentVideoUrl: string) {
+    const st = useUgcStore.getState();
+    useUgcStore.getState().setMusic({ musicStatus: "pending", musicError: null, musicRequestId: null });
+    try {
+      const res = await fetch("/api/ugc/music", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          videoUrl: silentVideoUrl,
+          archetypeId: st.archetypeId,
+          family: st.family,
+          duration: 5,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.request_id) {
+        throw new Error(data.error || "Music submit failed");
+      }
+      useUgcStore.getState().setMusic({ musicRequestId: data.request_id });
+
+      // Poll until done (max 3 minutes, 8s interval)
+      const MAX_MS = 3 * 60 * 1000;
+      const start = Date.now();
+      while (Date.now() - start < MAX_MS) {
+        await new Promise((r) => setTimeout(r, 8000));
+        const poll = await fetch(`/api/ugc/music?request_id=${data.request_id}`);
+        const pd = await poll.json();
+        if (pd.status === "success" && pd.videoUrl) {
+          useUgcStore.getState().setMusic({ musicStatus: "ready", musicError: null });
+          // Replace silent video URL with the audio-enhanced version
+          useUgcStore.getState().setVideo({ videoUrl: pd.videoUrl });
+          return;
+        }
+        if (pd.status === "fail") {
+          throw new Error(pd.error || "Music generation failed");
+        }
+      }
+      throw new Error("Music generation timed out");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Music failed";
+      console.warn("[ugc/music]", msg);
+      useUgcStore.getState().setMusic({ musicStatus: "error", musicError: msg });
+      // Non-fatal — keep the silent video
+    }
+  }
+
   function pollVideo(taskId: string) {
     const seedance = useUgcStore.getState().videoModel === "seedance-2" ||
                      useUgcStore.getState().videoModel === "seedance-2-fast";
@@ -1290,6 +1340,11 @@ EXPLICITLY AVOID
           // Overlay text (if any) was baked into the video prompt, so the
           // returned video already has the text rendered by the model.
           useUgcStore.getState().setVideo({ videoStatus: "ready", videoUrl: vidUrl });
+          // Kling videos are silent — add a soundtrack via MMAudio (Seedance
+          // already has native audio so we skip it there).
+          if (!seedance) {
+            addMusicToVideo(vidUrl);
+          }
           // Save to content history
           const st = useUgcStore.getState();
           const angle = getActiveAngle(st.brief);
@@ -2309,6 +2364,24 @@ EXPLICITLY AVOID
               </div>
               {videoTaskId && (
                 <div className="text-[11px] text-muted mt-2 font-mono truncate">task: {videoTaskId}</div>
+              )}
+              {/* Music status — shown only for Kling (non-Seedance) */}
+              {!isSeedance && videoStatus === "ready" && musicStatus === "pending" && (
+                <div className="mt-2 flex items-center gap-2 text-xs text-muted">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
+                  Adding soundtrack…
+                </div>
+              )}
+              {!isSeedance && musicStatus === "ready" && (
+                <div className="mt-2 flex items-center gap-2 text-xs text-green-500">
+                  <Check className="w-3.5 h-3.5 shrink-0" />
+                  Soundtrack added
+                </div>
+              )}
+              {!isSeedance && musicStatus === "error" && (
+                <div className="mt-2 text-[11px] text-muted">
+                  Soundtrack unavailable — video is ready without music.
+                </div>
               )}
             </div>
 

@@ -285,6 +285,10 @@ interface UgcStore {
   ttsDurationSec: number | null;
   ttsStatus: "idle" | "pending" | "ready" | "error";
   ttsError: string | null;
+  /** MMAudio soundtrack request ID (Kling videos only). */
+  musicRequestId: string | null;
+  musicStatus: "idle" | "pending" | "ready" | "error";
+  musicError: string | null;
 
   setStep: (step: UgcStep) => void;
   setFamily: (family: ArchetypeFamily | null) => void;
@@ -303,6 +307,7 @@ interface UgcStore {
   setHeroFrameIndex: (i: number) => void;
   setVideo: (patch: Partial<Pick<UgcStore, "videoTaskId" | "videoUrl" | "videoStatus" | "videoError">>) => void;
   setTts: (patch: Partial<Pick<UgcStore, "ttsUrl" | "ttsDurationSec" | "ttsStatus" | "ttsError">>) => void;
+  setMusic: (patch: Partial<Pick<UgcStore, "musicRequestId" | "musicStatus" | "musicError">>) => void;
   reset: () => void;
 }
 
@@ -346,6 +351,9 @@ export const useUgcStore = create<UgcStore>()(
       ttsDurationSec: null,
       ttsStatus: "idle",
       ttsError: null,
+      musicRequestId: null,
+      musicStatus: "idle",
+      musicError: null,
 
       setStep: (step) => set({ step }),
       setFamily: (family) => set({ family }),
@@ -369,6 +377,7 @@ export const useUgcStore = create<UgcStore>()(
       setHeroFrameIndex: (heroFrameIndex) => set({ heroFrameIndex }),
       setVideo: (patch) => set((s) => ({ ...s, ...patch })),
       setTts: (patch) => set((s) => ({ ...s, ...patch })),
+      setMusic: (patch) => set((s) => ({ ...s, ...patch })),
 
       reset: () =>
         set({
@@ -393,6 +402,9 @@ export const useUgcStore = create<UgcStore>()(
           ttsDurationSec: null,
           ttsStatus: "idle",
           ttsError: null,
+          musicRequestId: null,
+          musicStatus: "idle",
+          musicError: null,
         }),
     }),
     { name: "studio-ugc" }
