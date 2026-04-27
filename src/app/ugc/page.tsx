@@ -638,44 +638,66 @@ EXPLICITLY AVOID
 
     const isUgcFamily = family === "ugc";
 
-    // ── Scene lock prepend (UGC only) ──
-    // Every UGC keyframe must render THE SAME PERSON in THE SAME SCENE.
-    // The "creator" field (physical appearance) is placed FIRST because
-    // gpt-image-2 weights earlier prompt content more heavily — face/identity
-    // anchors must come before scene/outfit/lighting.
     const sceneLock = useUgcStore.getState().brief?.sceneLock;
-    const sceneLockBlock =
-      isUgcFamily && sceneLock
-        ? `\n\n${
-            sceneLock.creator
-              ? `── IDENTITY ANCHOR (same person in EVERY frame — do NOT change face, hair, skin, bone structure) ──\nCREATOR APPEARANCE: ${sceneLock.creator}\n── END IDENTITY ANCHOR ──\n\n`
-              : ""
-          }── SCENE LOCK (identical across every keyframe in this clip — do NOT vary) ──${
-            sceneLock.camera ? `\nCAMERA:       ${sceneLock.camera}` : ""
-          }${sceneLock.lighting ? `\nLIGHTING:     ${sceneLock.lighting}` : ""}${
-            sceneLock.colorGrade ? `\nCOLOR GRADE:  ${sceneLock.colorGrade}` : ""
-          }${sceneLock.environment ? `\nENVIRONMENT:  ${sceneLock.environment}` : ""}${
-            sceneLock.outfit ? `\nOUTFIT:       ${sceneLock.outfit}` : ""
-          }\n── END SCENE LOCK ──\n`
-        : "";
 
-    // ── Delta-prompt header for frame 1+ ──
-    // For any frame after the first, prepend an identity-lock directive.
-    // The IDENTITY ANCHOR block (from sceneLock.creator) already pins the
-    // physical description — this delta header reinforces via the reference
-    // images: the first input_url is always frame 0 (the identity anchor),
-    // subsequent input_urls are scene-continuity references.
-    const isDeltaFrame = isUgcFamily && index > 0;
-    const creatorDescription = sceneLock?.creator
-      ? `\nCREATOR (verbatim from brief — do NOT deviate): ${sceneLock.creator}`
-      : "";
-    const deltaHeader = isDeltaFrame
-      ? `── IDENTITY LOCK (this frame is a DELTA — do NOT create a new person) ──\nThe FIRST reference image is the canonical face reference. Reproduce THAT EXACT PERSON:${creatorDescription}\nIdentical face geometry: same jawline, cheekbones, eye shape/color/spacing, nose bridge, lip shape, hairline, earlobe. Identical skin quality: same tone, luminosity, healthy complexion (no new blemishes, dark circles, or redness). Identical hair style, flyaways. Identical outfit from scene lock. Identical key-light direction and color grade. Do NOT re-invent the face — copy it from the first reference image verbatim.\nApply ONLY the specific micro-change described in the prompt below (gesture, expression, product position, or progression of the use moment — the natural next beat of the action the first reference began).\n── END IDENTITY LOCK ──\n\n`
-      : "";
+    // ── gpt-image-2 best-practice prompt construction (UGC only) ──
+    // Based on fal.ai prompting guide:
+    //  1. Label EVERY reference image by role at the top — model guesses otherwise
+    //  2. Use "CHANGE ONLY / KEEP UNCHANGED" pattern for delta frames
+    //  3. Repeat the full preserve list with concrete visual facts each time
+    let promptToSend: string;
 
-    const promptToSend = isUgcFamily
-      ? `${deltaHeader}${prompt}${sceneLockBlock}${UGC_VISUAL_DIRECTIVE}`
-      : prompt;
+    if (!isUgcFamily) {
+      promptToSend = prompt;
+    } else {
+      const creator = sceneLock?.creator || "";
+      const outfit  = sceneLock?.outfit  || "";
+      const lighting = sceneLock?.lighting || "";
+      const colorGrade = sceneLock?.colorGrade || "";
+      const environment = sceneLock?.environment || "";
+      const camera = sceneLock?.camera || "";
+
+      // Frame 0 — only product image is available as reference
+      if (index === 0) {
+        const refLabels = `[Image 1] = PRODUCT REFERENCE — match this exact product (packaging, shape, label, color) in the scene.\n\n`;
+        const identityBlock = creator
+          ? `CREATOR TO RENDER: ${creator}\n\n`
+          : "";
+        const sceneBlock = [
+          camera      && `CAMERA: ${camera}`,
+          lighting    && `LIGHTING: ${lighting}`,
+          colorGrade  && `COLOR GRADE: ${colorGrade}`,
+          environment && `ENVIRONMENT: ${environment}`,
+          outfit      && `OUTFIT: ${outfit}`,
+        ].filter(Boolean).join("\n");
+
+        promptToSend = `${refLabels}${identityBlock}SCENE:\n${prompt}${sceneBlock ? `\n\n${sceneBlock}` : ""}${UGC_VISUAL_DIRECTIVE}`;
+      } else {
+        // Frame 1+: explicit role labels + "CHANGE ONLY / KEEP UNCHANGED"
+        // inputs array is [frame0, (frame1 if index≥2), product]
+        const productLabel = inputs.length >= 3
+          ? `[Image ${inputs.length}] = PRODUCT REFERENCE — match this exact product.\n`
+          : inputs.length === 2
+          ? `[Image 2] = PRODUCT REFERENCE — match this exact product.\n`
+          : "";
+        const frame0Label = `[Image 1] = IDENTITY REFERENCE — this is the creator. Copy this exact person verbatim.\n`;
+        const frame1Label = inputs.length >= 3
+          ? `[Image 2] = SCENE CONTEXT — same setting and creator from previous beat.\n`
+          : "";
+
+        const preserveList = [
+          creator     && `face (identical to Image 1: same jawline, cheekbones, eye shape and color, nose bridge, lip shape, hairline, skin tone and texture — do NOT reinvent)`,
+          outfit      && `outfit (${outfit})`,
+          lighting    && `lighting direction and color (${lighting})`,
+          colorGrade  && `color grade (${colorGrade})`,
+          environment && `environment (${environment})`,
+        ].filter(Boolean).join("; ");
+
+        const changeOnly = `CHANGE ONLY: the specific action or scene beat described below.\nKEEP UNCHANGED: ${preserveList || "face, outfit, lighting, environment"}.`;
+
+        promptToSend = `${frame0Label}${frame1Label}${productLabel}\n${changeOnly}\n\nSCENE BEAT:\n${prompt}${UGC_VISUAL_DIRECTIVE}`;
+      }
+    }
 
     patchKeyframe(index, {
       status: "pending",
