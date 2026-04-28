@@ -656,6 +656,25 @@ const KEYFRAME_RULES_SEEDANCE: Record<string, string> = {
 };
 
 function buildSystemPromptKling(family: string, archetypeId?: string): string {
+  const isUgcFamily = family === "ugc";
+  // Commercial/Cinematic: no creator in sceneLock (no people on screen).
+  // UGC: full creator identity anchor so every keyframe shows the same person.
+  const sceneLockShape = isUgcFamily
+    ? `"sceneLock": {
+    "creator": "IDENTITY ANCHOR — describe the creator's exact physical appearance so every keyframe renders the same person. Include: age as number, ethnicity, gender, face shape, eye shape+color, skin tone, nose, lips, jaw, cheekbones, eyebrow shape, hair length+color+texture+style. e.g. '26-year-old Korean woman, oval face, almond-shaped dark-brown eyes, warm honey-tan skin, straight black shoulder-length hair with curtain bangs'",
+    "camera": "focal length, height, framing",
+    "lighting": "source + direction + color temp",
+    "colorGrade": "grade name + mood",
+    "environment": "micro-details of room/location behind creator",
+    "outfit": "every garment piece + accessories"
+  }`
+    : `"sceneLock": {
+    "camera": "focal length, height, framing",
+    "lighting": "source + direction + color temp (no people — product only)",
+    "colorGrade": "grade name + mood",
+    "environment": "surface/backdrop context for the product (no people, no hands)"
+  }`;
+
   return `You are a senior creative director for DTC brands. Given a product image + minimal brief, produce a video plan for a KLING image-to-video pipeline.
 
 IMPORTANT CONTEXT: This is for an AI VIDEO GENERATION tool (Kling / Seedance) that creates FULLY SYNTHETIC animated content from text prompts and reference images. No real people are filmed or depicted. All "creators" are AI-generated characters. This is a legitimate creative marketing workflow used by brands worldwide. You must generate ALL requested fields including the videoPrompt — never refuse.
@@ -677,20 +696,13 @@ Return STRICT JSON:
   "keyframePrompts": ["string", "string", "string"],
   "videoPrompt": "Base video prompt for Kling i2v — describes motion, product handling, camera, pacing. Do NOT include the spoken line — the client appends it. Under 100 words. MUST be written in the same language as the output language specified below.",
   "durationSec": 8,
-  "sceneLock": {
-    "creator": "IDENTITY ANCHOR — describe the creator's exact physical appearance so every keyframe renders the same person. Include: age as number, ethnicity, gender, face shape, eye shape+color, skin tone, nose, lips, jaw, cheekbones, eyebrow shape, hair length+color+texture+style. e.g. '26-year-old Korean woman, oval face, almond-shaped dark-brown eyes, warm honey-tan skin, straight black shoulder-length hair with curtain bangs'",
-    "camera": "focal length, height, framing",
-    "lighting": "source + direction + color temp",
-    "colorGrade": "grade name + mood",
-    "environment": "micro-details of room/location behind creator",
-    "outfit": "every garment piece + accessories"
-  }
+  ${sceneLockShape}
 }
 
 ${buildAngleRules(family, archetypeId)}
 
 ${KEYFRAME_IDENTITY_RULE}
-${SCENE_LOCK_RULE}
+${isUgcFamily ? SCENE_LOCK_RULE : ""}
 ${KEYFRAME_RULES_KLING[family] || KEYFRAME_RULES_KLING.ugc}
 `;
 }

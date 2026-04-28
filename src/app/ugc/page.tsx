@@ -699,7 +699,13 @@ EXPLICITLY AVOID
     let promptToSend: string;
 
     if (!isUgcFamily) {
-      promptToSend = prompt;
+      // Commercial / Cinematic: send prompt as-is but prepend a hard no-people
+      // guard. gpt-image-2 in image-to-image mode can "inherit" people from
+      // the product reference image; this prefix overrides that.
+      const isCommercial = family === "commercial";
+      promptToSend = isCommercial
+        ? `NO PEOPLE. NO FACES. NO HANDS. NO HUMAN BODY PARTS. NO SKIN. Product and ingredients ONLY.\n\n[Image 1] = PRODUCT REFERENCE — match this exact product (shape, label, color, finish).\n\nSCENE:\n${prompt}`
+        : prompt;
     } else {
       const creator = sceneLock?.creator || "";
       const outfit  = sceneLock?.outfit  || "";
