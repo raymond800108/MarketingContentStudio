@@ -305,6 +305,11 @@ function LandingPage() {
       {/* ─── HERO — input as hero ────────────────────── */}
       <section className="px-6 py-10 sm:py-16 max-w-6xl w-full mx-auto">
 
+        {/* ── convra. logo — above the headline, larger ── */}
+        <div style={{ textAlign: "center", marginBottom: "2rem" }}>
+          <ConvraLogo size="clamp(3rem, 7vw, 5rem)" dark={isDark} />
+        </div>
+
         <h1 className="text-4xl sm:text-6xl font-bold tracking-tight text-center max-w-3xl mx-auto leading-tight">
           {tM("landing.hero.headline", "Turn a product photo into a viral video ad.")}
         </h1>
@@ -315,24 +320,21 @@ function LandingPage() {
           )}
         </p>
 
-        {/* ── convra. logo + model strip — sits between headline and inputs ── */}
-        <div style={{ textAlign: "center", margin: "2rem 0 0" }}>
-          <ConvraLogo size="2rem" dark={isDark} />
-          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "center", gap: "6px 10px", marginTop: "0.5rem" }}>
-            <span style={{ fontSize: "0.6rem", letterSpacing: "0.18em", textTransform: "uppercase", color: isDark ? "rgba(180,210,230,0.38)" : "rgba(80,50,20,0.4)", fontFamily: "'Space Mono', monospace" }}>
-              {tM("landing.powered.label", "Powered by")}
+        {/* ── Powered-by strip — between subtitle and inputs ── */}
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "center", gap: "6px 10px", marginTop: "1.5rem" }}>
+          <span style={{ fontSize: "0.6rem", letterSpacing: "0.18em", textTransform: "uppercase", color: isDark ? "rgba(180,210,230,0.38)" : "rgba(80,50,20,0.4)", fontFamily: "'Space Mono', monospace" }}>
+            {tM("landing.powered.label", "Powered by")}
+          </span>
+          {[
+            { name: "GPT Image 2",  color: isDark ? "#06b6d4" : "#0891b2" },
+            { name: "Seedance 2.0", color: isDark ? "#a78bfa" : "#7c3aed" },
+            { name: "Kling 3.0",    color: isDark ? "#34d399" : "#059669" },
+          ].map((m, i) => (
+            <span key={m.name} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+              {i > 0 && <span style={{ color: isDark ? "rgba(180,210,230,0.18)" : "rgba(80,50,20,0.18)", fontSize: "0.6rem" }}>·</span>}
+              <span style={{ fontSize: "0.68rem", fontFamily: "'Space Mono', monospace", fontWeight: 700, letterSpacing: "0.06em", color: m.color }}>{m.name}</span>
             </span>
-            {[
-              { name: "GPT Image 2",  color: isDark ? "#06b6d4" : "#0891b2" },
-              { name: "Seedance 2.0", color: isDark ? "#a78bfa" : "#7c3aed" },
-              { name: "Kling 3.0",    color: isDark ? "#34d399" : "#059669" },
-            ].map((m, i) => (
-              <span key={m.name} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                {i > 0 && <span style={{ color: isDark ? "rgba(180,210,230,0.18)" : "rgba(80,50,20,0.18)", fontSize: "0.6rem" }}>·</span>}
-                <span style={{ fontSize: "0.68rem", fontFamily: "'Space Mono', monospace", fontWeight: 700, letterSpacing: "0.06em", color: m.color }}>{m.name}</span>
-              </span>
-            ))}
-          </div>
+          ))}
         </div>
 
         {/* Input-as-hero panel */}
