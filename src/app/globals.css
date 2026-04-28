@@ -1,11 +1,13 @@
 @import "tailwindcss";
 
 /* ══════════════════════════════════════════════════════════════
-   NEURAL INTERFACE — Sci-fi Dark Theme
-   Deep space · Electric cyan · Neon violet · HUD aesthetics
+   THEME SYSTEM
+   Two distinct themes, switched via [data-theme] on <html>
    ══════════════════════════════════════════════════════════════ */
 
-:root {
+/* ─── NEURAL INTERFACE: Sci-fi Dark (default) ─── */
+:root,
+[data-theme="dark"] {
   --background:     #030b18;
   --foreground:     #c8e6ff;
   --card:           #071220;
@@ -20,10 +22,38 @@
   --success:        #10b981;
   --danger:         #f43f5e;
 
+  --body-bg-grad-1: rgba(6, 182, 212, 0.07);
+  --body-bg-grad-2: rgba(124, 58, 237, 0.05);
+
   --font-display: 'Orbitron', monospace;
   --font-heading: 'Syne', sans-serif;
   --font-sans:    'Outfit', system-ui, sans-serif;
   --font-mono:    'Space Mono', monospace;
+}
+
+/* ─── SOLAR PULSE: Warm Bright ─── */
+[data-theme="light"] {
+  --background:     #fdfaf5;
+  --foreground:     #1c1309;
+  --card:           #ffffff;
+  --card-hover:     #fff8f0;
+  --border:         rgba(234, 100, 30, 0.14);
+  --border-hover:   rgba(234, 100, 30, 0.38);
+  --primary:        #ea6420;
+  --primary-hover:  #f97316;
+  --muted:          #9c8070;
+  --accent:         #ea6420;
+  --accent-light:   #fb923c;
+  --success:        #16a34a;
+  --danger:         #dc2626;
+
+  --body-bg-grad-1: rgba(251, 146, 60, 0.06);
+  --body-bg-grad-2: rgba(239, 68, 68, 0.03);
+
+  --font-display: 'Playfair Display', Georgia, serif;
+  --font-heading: 'Plus Jakarta Sans', system-ui, sans-serif;
+  --font-sans:    'Plus Jakarta Sans', system-ui, sans-serif;
+  --font-mono:    'JetBrains Mono', monospace;
 }
 
 @theme inline {
@@ -59,9 +89,128 @@ body {
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   background-image:
-    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(6, 182, 212, 0.07) 0%, transparent 60%),
-    radial-gradient(ellipse 50% 40% at 80% 80%, rgba(124, 58, 237, 0.05) 0%, transparent 50%);
+    radial-gradient(ellipse 80% 50% at 50% -20%, var(--body-bg-grad-1, rgba(6,182,212,0.07)) 0%, transparent 60%),
+    radial-gradient(ellipse 50% 40% at 80% 80%, var(--body-bg-grad-2, rgba(124,58,237,0.05)) 0%, transparent 50%);
   background-attachment: fixed;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* ─── Light theme overrides ─── */
+[data-theme="light"] body,
+[data-theme="light"] {
+  font-family: var(--font-sans);
+}
+
+[data-theme="light"] h1,
+[data-theme="light"] h2,
+[data-theme="light"] h3,
+[data-theme="light"] h4,
+[data-theme="light"] h5,
+[data-theme="light"] h6 {
+  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  color: #1c1309;
+}
+
+[data-theme="light"] input,
+[data-theme="light"] textarea,
+[data-theme="light"] select {
+  background: #ffffff;
+  border-color: rgba(234, 100, 30, 0.18);
+  color: #1c1309;
+}
+[data-theme="light"] input:focus,
+[data-theme="light"] textarea:focus,
+[data-theme="light"] select:focus {
+  border-color: #ea6420;
+  box-shadow: 0 0 0 3px rgba(234, 100, 30, 0.1);
+}
+[data-theme="light"] input::placeholder,
+[data-theme="light"] textarea::placeholder { color: #9c8070; }
+
+[data-theme="light"] .inp {
+  background: #ffffff;
+  border-color: rgba(234, 100, 30, 0.18);
+  color: #1c1309;
+}
+[data-theme="light"] .inp:focus {
+  border-color: #ea6420;
+  box-shadow: 0 0 0 3px rgba(234, 100, 30, 0.1);
+}
+
+[data-theme="light"] * {
+  scrollbar-color: rgba(234, 100, 30, 0.25) transparent;
+}
+[data-theme="light"] ::-webkit-scrollbar-thumb {
+  background: rgba(234, 100, 30, 0.2);
+}
+
+[data-theme="light"] ::selection {
+  background: rgba(234, 100, 30, 0.18);
+  color: #5a1e00;
+}
+
+[data-theme="light"] .drop-zone.dragging {
+  border-color: #ea6420;
+  background: rgba(234, 100, 30, 0.04);
+  box-shadow: 0 0 24px rgba(234, 100, 30, 0.1);
+}
+
+[data-theme="light"] .generating::after {
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    rgba(234, 100, 30, 0.06),
+    transparent
+  );
+}
+
+[data-theme="light"] .text-gradient-cyber {
+  background: linear-gradient(135deg, #ea6420 0%, #f97316 45%, #ef4444 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-size: 200% 200%;
+  animation: gradient-x 5s ease infinite;
+}
+
+[data-theme="light"] audio {
+  filter: none;
+  border-radius: 8px;
+}
+
+/* Light theme card warmth */
+[data-theme="light"] .hud-bracket::before,
+[data-theme="light"] .hud-bracket::after {
+  border-color: rgba(234, 100, 30, 0.35);
+}
+[data-theme="light"] .hud-bracket:hover::before,
+[data-theme="light"] .hud-bracket:hover::after {
+  border-color: #ea6420;
+}
+
+/* Light generating pulse */
+[data-theme="light"] .generating {
+  animation: pulse-glow-warm 2.2s ease-in-out infinite;
+}
+
+@keyframes pulse-glow-warm {
+  0%, 100% {
+    box-shadow: 0 0 15px rgba(234, 100, 30, 0.08),
+                inset 0 0 0 1px rgba(234, 100, 30, 0.15);
+  }
+  50% {
+    box-shadow: 0 0 35px rgba(234, 100, 30, 0.2),
+                0 0 70px rgba(234, 100, 30, 0.06),
+                inset 0 0 0 1px rgba(234, 100, 30, 0.35);
+  }
+}
+
+/* Light bg-cyber-grid → warm grid */
+[data-theme="light"] .bg-cyber-grid {
+  background-image:
+    linear-gradient(rgba(234, 100, 30, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(234, 100, 30, 0.04) 1px, transparent 1px);
+  background-size: 44px 44px;
 }
 
 h1, h2, h3, h4, h5, h6 {

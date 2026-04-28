@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Sparkles, Share2, LayoutDashboard, ChevronDown, Languages, KanbanSquare, Clapperboard, Camera } from "lucide-react";
-import { useState } from "react";
+import { Sparkles, Share2, LayoutDashboard, ChevronDown, Languages, KanbanSquare, Clapperboard, Camera, Sun, Moon } from "lucide-react";
+import { useState, useEffect } from "react";
 import { useProfileStore } from "@/lib/stores/profile-store";
 import { getProfile, PROFILE_LIST } from "@/lib/profiles";
 import { useT, useTMaybe, useI18nStore, LOCALE_LABELS, LOCALE_NAMES, type Locale } from "@/lib/i18n";
 import UserMenu from "@/components/UserMenu";
 import { useAuth } from "@/lib/useAuth";
+import { useThemeStore } from "@/lib/stores/theme-store";
 
 const USER_BRAND_TITLES: Record<string, string> = {
   "necksy.de@gmail.com":       "NECKSY",
@@ -38,6 +39,13 @@ export default function AppHeader() {
   const { locale, setLocale } = useI18nStore();
   const { user } = useAuth();
   const brandTitle = brandAssets.name?.toUpperCase() || getBrandTitleForUser(user?.email, user?.role);
+  const { theme, toggle } = useThemeStore();
+  const isDark = theme === "dark";
+
+  // Sync data-theme attribute on mount (hydration)
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+  }, [theme]);
 
   const NAV_ITEMS = [
     { href: "/studio",    labelKey: "nav.studio"    as const, icon: Sparkles },
@@ -54,18 +62,26 @@ export default function AppHeader() {
         position: "sticky",
         top: 0,
         zIndex: 50,
-        background: "rgba(3, 11, 24, 0.88)",
+        background: isDark ? "rgba(3, 11, 24, 0.88)" : "rgba(253, 250, 245, 0.92)",
         backdropFilter: "blur(24px) saturate(1.6)",
-        borderBottom: "1px solid rgba(6, 182, 212, 0.12)",
-        boxShadow: "0 1px 0 rgba(6, 182, 212, 0.06), 0 4px 32px rgba(0,0,0,0.4)",
+        borderBottom: isDark
+          ? "1px solid rgba(6, 182, 212, 0.12)"
+          : "1px solid rgba(234, 100, 30, 0.12)",
+        boxShadow: isDark
+          ? "0 1px 0 rgba(6,182,212,0.06), 0 4px 32px rgba(0,0,0,0.4)"
+          : "0 1px 0 rgba(234,100,30,0.06), 0 4px 24px rgba(28,19,9,0.08)",
+        transition: "background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease",
       }}
     >
-      {/* Subtle top accent line */}
+      {/* Top accent line */}
       <div style={{
         position: "absolute",
         top: 0, left: 0, right: 0,
         height: "1px",
-        background: "linear-gradient(90deg, transparent 0%, rgba(6,182,212,0.5) 20%, rgba(124,58,237,0.5) 80%, transparent 100%)",
+        background: isDark
+          ? "linear-gradient(90deg, transparent 0%, rgba(6,182,212,0.5) 20%, rgba(124,58,237,0.5) 80%, transparent 100%)"
+          : "linear-gradient(90deg, transparent 0%, rgba(234,100,30,0.5) 20%, rgba(239,68,68,0.4) 80%, transparent 100%)",
+        transition: "background 0.3s ease",
       }} />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-3">
@@ -75,22 +91,27 @@ export default function AppHeader() {
           <div style={{
             width: 32, height: 32,
             borderRadius: 8,
-            background: "linear-gradient(135deg, #0891b2, #06b6d4)",
+            background: isDark
+              ? "linear-gradient(135deg, #0891b2, #06b6d4)"
+              : "linear-gradient(135deg, #ea6420, #f97316)",
             display: "flex", alignItems: "center", justifyContent: "center",
-            boxShadow: "0 0 16px rgba(6,182,212,0.4), inset 0 1px 0 rgba(255,255,255,0.15)",
-            transition: "box-shadow 0.2s ease, transform 0.2s ease",
+            boxShadow: isDark
+              ? "0 0 16px rgba(6,182,212,0.4), inset 0 1px 0 rgba(255,255,255,0.15)"
+              : "0 0 16px rgba(234,100,30,0.35), inset 0 1px 0 rgba(255,255,255,0.2)",
+            transition: "all 0.3s ease",
           }}
             className="group-hover:scale-105"
           >
-            <Sparkles className="w-4 h-4" style={{ color: "#030b18" }} />
+            <Sparkles className="w-4 h-4" style={{ color: isDark ? "#030b18" : "#ffffff" }} />
           </div>
           <span style={{
-            fontFamily: "'Orbitron', monospace",
-            fontWeight: 700,
-            fontSize: "0.85rem",
-            letterSpacing: "0.12em",
-            color: "#06b6d4",
-            textShadow: "0 0 12px rgba(6,182,212,0.5)",
+            fontFamily: isDark ? "'Orbitron', monospace" : "'Playfair Display', Georgia, serif",
+            fontWeight: isDark ? 700 : 700,
+            fontSize: isDark ? "0.85rem" : "1rem",
+            letterSpacing: isDark ? "0.12em" : "0.01em",
+            color: isDark ? "#06b6d4" : "#ea6420",
+            textShadow: isDark ? "0 0 12px rgba(6,182,212,0.5)" : "none",
+            transition: "all 0.3s ease",
           }}>
             {brandTitle}
           </span>
@@ -101,11 +122,12 @@ export default function AppHeader() {
           display: "flex",
           alignItems: "center",
           gap: 2,
-          background: "rgba(6, 18, 32, 0.8)",
+          background: isDark ? "rgba(6,18,32,0.8)" : "rgba(255,250,245,0.9)",
           borderRadius: 10,
-          border: "1px solid rgba(6, 182, 212, 0.1)",
+          border: isDark ? "1px solid rgba(6,182,212,0.1)" : "1px solid rgba(234,100,30,0.12)",
           padding: "3px 4px",
           backdropFilter: "blur(8px)",
+          transition: "all 0.3s ease",
         }}>
           {NAV_ITEMS.map(({ href, labelKey, icon: Icon }) => {
             const active = pathname.startsWith(href);
@@ -121,25 +143,31 @@ export default function AppHeader() {
                   borderRadius: 7,
                   fontSize: "0.8rem",
                   fontWeight: active ? 600 : 400,
-                  fontFamily: "'Syne', sans-serif",
+                  fontFamily: isDark ? "'Syne', sans-serif" : "'Plus Jakarta Sans', sans-serif",
                   letterSpacing: "0.02em",
                   textDecoration: "none",
                   transition: "all 0.18s ease",
                   whiteSpace: "nowrap",
                   background: active
-                    ? "linear-gradient(135deg, rgba(6,182,212,0.2), rgba(6,182,212,0.12))"
+                    ? isDark
+                      ? "linear-gradient(135deg, rgba(6,182,212,0.2), rgba(6,182,212,0.12))"
+                      : "linear-gradient(135deg, rgba(234,100,30,0.15), rgba(234,100,30,0.08))"
                     : "transparent",
-                  color: active ? "#06b6d4" : "rgba(100,160,200,0.7)",
+                  color: active
+                    ? isDark ? "#06b6d4" : "#ea6420"
+                    : isDark ? "rgba(100,160,200,0.7)" : "rgba(80,50,30,0.6)",
                   boxShadow: active
-                    ? "0 0 12px rgba(6,182,212,0.2), inset 0 0 0 1px rgba(6,182,212,0.25)"
+                    ? isDark
+                      ? "0 0 12px rgba(6,182,212,0.2), inset 0 0 0 1px rgba(6,182,212,0.25)"
+                      : "inset 0 0 0 1px rgba(234,100,30,0.2)"
                     : "none",
-                  textShadow: active ? "0 0 8px rgba(6,182,212,0.5)" : "none",
+                  textShadow: active && isDark ? "0 0 8px rgba(6,182,212,0.5)" : "none",
                 }}
                 onMouseEnter={(e) => {
-                  if (!active) (e.currentTarget as HTMLElement).style.color = "#c8e6ff";
+                  if (!active) (e.currentTarget as HTMLElement).style.color = isDark ? "#c8e6ff" : "#1c1309";
                 }}
                 onMouseLeave={(e) => {
-                  if (!active) (e.currentTarget as HTMLElement).style.color = "rgba(100,160,200,0.7)";
+                  if (!active) (e.currentTarget as HTMLElement).style.color = isDark ? "rgba(100,160,200,0.7)" : "rgba(80,50,30,0.6)";
                 }}
               >
                 <Icon style={{ width: 13, height: 13 }} />
@@ -151,6 +179,49 @@ export default function AppHeader() {
 
         {/* ── Right controls ── */}
         <div className="flex items-center gap-2">
+
+          {/* Theme toggle */}
+          <button
+            onClick={toggle}
+            title={isDark ? "Switch to Solar Pulse" : "Switch to Neural Interface"}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 32,
+              height: 32,
+              borderRadius: 8,
+              border: isDark
+                ? "1px solid rgba(6,182,212,0.2)"
+                : "1px solid rgba(234,100,30,0.2)",
+              background: isDark
+                ? "rgba(6,18,32,0.7)"
+                : "rgba(255,250,245,0.8)",
+              cursor: "pointer",
+              transition: "all 0.25s ease",
+              position: "relative",
+              overflow: "hidden",
+              flexShrink: 0,
+            }}
+          >
+            <span style={{
+              position: "absolute",
+              transition: "transform 0.35s cubic-bezier(0.34,1.56,0.64,1), opacity 0.25s ease",
+              transform: isDark ? "translateY(0) rotate(0deg)" : "translateY(-120%) rotate(-30deg)",
+              opacity: isDark ? 1 : 0,
+            }}>
+              <Moon style={{ width: 14, height: 14, color: "#06b6d4" }} />
+            </span>
+            <span style={{
+              position: "absolute",
+              transition: "transform 0.35s cubic-bezier(0.34,1.56,0.64,1), opacity 0.25s ease",
+              transform: isDark ? "translateY(120%) rotate(30deg)" : "translateY(0) rotate(0deg)",
+              opacity: isDark ? 0 : 1,
+            }}>
+              <Sun style={{ width: 14, height: 14, color: "#ea6420" }} />
+            </span>
+          </button>
+
           <UserMenu />
 
           {/* Language toggle */}
