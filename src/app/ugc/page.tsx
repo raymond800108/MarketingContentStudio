@@ -535,6 +535,18 @@ export default function UgcStudioPage() {
     }
   }
 
+  /** Checks if an image URL is still accessible using browser Image loading.
+   *  No CORS issues — browsers allow cross-origin image loads by default. */
+  function isImageUrlValid(url: string): Promise<boolean> {
+    return new Promise((resolve) => {
+      const img = new window.Image();
+      img.onload = () => resolve(true);
+      img.onerror = () => resolve(false);
+      // Cache-bust to avoid stale browser cache masking an expiry
+      img.src = `${url}${url.includes("?") ? "&" : "?"}_t=${Date.now()}`;
+    });
+  }
+
   async function generateKeyframe(
     index: number,
     prompt: string,
@@ -542,6 +554,26 @@ export default function UgcStudioPage() {
     retryCount: number = 0
   ) {
     if (!productImageUrl) return;
+
+    // Pre-flight: check the product image URL is still downloadable.
+    // FAL CDN signed URLs expire — Kie will 500 if it can't fetch the ref.
+    // Only check on the first attempt (retries use the same URL anyway).
+    if (retryCount === 0) {
+      const valid = await isImageUrlValid(productImageUrl);
+      if (!valid) {
+        setProductExpired(true);
+        setProductImageUrl(null);
+        setStep("product");
+        // Mark all pending frames as idle so the user starts fresh after re-upload
+        useUgcStore.getState().keyframes.forEach((k) => {
+          if (k.status === "pending" || k.status === "error") {
+            useUgcStore.getState().patchKeyframe(k.index, { status: "idle", error: undefined });
+          }
+        });
+        return;
+      }
+    }
+
     // Default to product ref if caller didn't specify (backcompat for manual retries).
     const inputs = imageInputs ?? [productImageUrl];
 
@@ -2005,9 +2037,28 @@ EXPLICITLY AVOID
             <h2 className="text-lg font-semibold">
               {isSeedance ? t("ugc.story.titleSeedance") : t("ugc.story.title")}
             </h2>
-            <button onClick={() => setStep("brief")} className="text-sm text-muted hover:text-foreground flex items-center gap-1">
-              <ArrowLeft className="w-3.5 h-3.5" /> {t("ugc.story.back")}
-            </button>
+            <div className="flex items-center gap-3">
+              {/* Retry All — shown when every frame is in error state */}
+              {keyframes.length > 0 && keyframes.every((k) => k.status === "error") && (
+                <button
+                  onClick={() => {
+                    // Reset all frames to idle then restart the chain from frame 0
+                    const frames = useUgcStore.getState().keyframes;
+                    frames.forEach((k) => patchKeyframe(k.index, { status: "idle", error: undefined, taskId: undefined }));
+                    setTimeout(() => {
+                      const fresh = useUgcStore.getState().keyframes;
+                      if (fresh[0]) generateKeyframe(fresh[0].index, fresh[0].prompt, fresh[0].imageInputs);
+                    }, 50);
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent text-white text-sm hover:opacity-90"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" /> Retry All
+                </button>
+              )}
+              <button onClick={() => setStep("brief")} className="text-sm text-muted hover:text-foreground flex items-center gap-1">
+                <ArrowLeft className="w-3.5 h-3.5" /> {t("ugc.story.back")}
+              </button>
+            </div>
           </div>
 
           {/* Angle picker + script — hidden for Kling (music-only, no narration) */}
