@@ -305,9 +305,45 @@ function LandingPage() {
       {/* ─── HERO — input as hero ────────────────────── */}
       <section className="px-6 py-10 sm:py-16 max-w-6xl w-full mx-auto">
 
-        {/* Big logo above headline */}
+        {/* Big logo + powered-by + tags above headline */}
         <div style={{ textAlign: "center", marginBottom: "2.5rem" }}>
           <ConvraLogo size="clamp(4rem, 10vw, 7rem)" dark={isDark} />
+
+          {/* Powered-by model strip */}
+          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "center", gap: "5px 8px", marginTop: "1rem" }}>
+            <span style={{ fontSize: "0.58rem", letterSpacing: "0.18em", textTransform: "uppercase", color: isDark ? "rgba(180,210,230,0.38)" : "rgba(80,50,20,0.4)", fontFamily: "'Space Mono', monospace" }}>
+              {tM("landing.powered.label", "Powered by")}
+            </span>
+            {[
+              { name: "GPT Image 2",  color: isDark ? "#06b6d4" : "#0891b2" },
+              { name: "Seedance 2.0", color: isDark ? "#a78bfa" : "#7c3aed" },
+              { name: "Kling 3.0",    color: isDark ? "#34d399" : "#059669" },
+            ].map((m, i) => (
+              <span key={m.name} style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                {i > 0 && <span style={{ color: isDark ? "rgba(180,210,230,0.18)" : "rgba(80,50,20,0.18)", fontSize: "0.58rem" }}>·</span>}
+                <span style={{ fontSize: "0.65rem", fontFamily: "'Space Mono', monospace", fontWeight: 700, letterSpacing: "0.06em", color: m.color }}>{m.name}</span>
+              </span>
+            ))}
+          </div>
+
+          {/* Value-prop tags */}
+          <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "6px 10px", marginTop: "0.75rem" }}>
+            {([
+              tM("landing.tag.viral",    "2026 viral ad logic"),
+              tM("landing.tag.hook",     "hook-first structure"),
+              tM("landing.tag.platform", "platform-native ratios"),
+              tM("landing.tag.scroll",   "scroll-stopping visuals"),
+            ] as string[]).map((tag) => (
+              <span key={tag} style={{
+                fontSize: "0.62rem", letterSpacing: "0.08em", textTransform: "uppercase",
+                padding: "2px 8px", borderRadius: 4,
+                border: `1px solid ${isDark ? "rgba(6,182,212,0.18)" : "rgba(234,100,30,0.15)"}`,
+                color: isDark ? "rgba(180,210,230,0.5)" : "rgba(80,50,20,0.6)",
+                fontFamily: "'Outfit', system-ui, sans-serif", fontWeight: 500,
+                background: isDark ? "rgba(6,182,212,0.04)" : "rgba(234,100,30,0.03)",
+              }}>{tag}</span>
+            ))}
+          </div>
         </div>
 
         <h1 className="text-4xl sm:text-6xl font-bold tracking-tight text-center max-w-3xl mx-auto leading-tight">
@@ -690,47 +726,8 @@ function LandingPage() {
       {/* ─── How it works ────────────────────────────── */}
       <section className="px-6 py-16 max-w-5xl mx-auto w-full">
 
-        {/* convra. logo + model strip + tags */}
         <div style={{ textAlign: "center", marginBottom: "3rem" }}>
-
-          {/* Powered-by model strip */}
-          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "center", gap: "6px 10px", marginTop: "1rem" }}>
-            <span style={{ fontSize: "0.65rem", letterSpacing: "0.18em", textTransform: "uppercase", color: isDark ? "rgba(180,210,230,0.4)" : "rgba(80,50,20,0.45)", fontFamily: "'Space Mono', monospace" }}>
-              {tM("landing.powered.label", "Powered by")}
-            </span>
-            {[
-              { name: "GPT Image 2",  color: isDark ? "#06b6d4" : "#0891b2" },
-              { name: "Seedance 2.0", color: isDark ? "#a78bfa" : "#7c3aed" },
-              { name: "Kling 3.0",    color: isDark ? "#34d399" : "#059669" },
-            ].map((m, i) => (
-              <span key={m.name} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                {i > 0 && <span style={{ color: isDark ? "rgba(180,210,230,0.2)" : "rgba(80,50,20,0.2)", fontSize: "0.65rem" }}>·</span>}
-                <span style={{ fontSize: "0.72rem", fontFamily: "'Space Mono', monospace", fontWeight: 700, letterSpacing: "0.06em", color: m.color }}>{m.name}</span>
-              </span>
-            ))}
-          </div>
-
-          {/* Translated value-prop tags */}
-          <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "8px 12px", marginTop: "1rem" }}>
-            {([
-              tM("landing.tag.viral",    "2026 viral ad logic"),
-              tM("landing.tag.hook",     "hook-first structure"),
-              tM("landing.tag.platform", "platform-native ratios"),
-              tM("landing.tag.scroll",   "scroll-stopping visuals"),
-            ] as string[]).map((tag) => (
-              <span key={tag} style={{
-                fontSize: "0.68rem", letterSpacing: "0.08em", textTransform: "uppercase",
-                padding: "3px 10px", borderRadius: 4,
-                border: `1px solid ${isDark ? "rgba(6,182,212,0.2)" : "rgba(234,100,30,0.18)"}`,
-                color: isDark ? "rgba(180,210,230,0.55)" : "rgba(80,50,20,0.65)",
-                fontFamily: "'Outfit', system-ui, sans-serif", fontWeight: 500,
-                background: isDark ? "rgba(6,182,212,0.04)" : "rgba(234,100,30,0.04)",
-              }}>{tag}</span>
-            ))}
-          </div>
-
-          {/* Section heading below */}
-          <h2 className="text-3xl sm:text-4xl font-bold tracking-tight mt-8 mb-0">
+          <h2 className="text-3xl sm:text-4xl font-bold tracking-tight">
             {tM("landing.how.title", "Three inputs. One viral ad.")}
           </h2>
         </div>
