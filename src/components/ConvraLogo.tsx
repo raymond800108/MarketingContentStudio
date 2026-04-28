@@ -30,44 +30,23 @@ export default function ConvraLogo({
   linked = true,
   className = "",
 }: ConvraLogoProps) {
-  const content = dark ? (
-    // ── Dark: CSS wordmark ──────────────────────────────────────────
-    <span
-      className={className}
-      style={{ display: "inline-flex", alignItems: "baseline", gap: 0, userSelect: "none" }}
-    >
-      <span style={{
-        fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
-        fontWeight: 300,
-        fontSize: size,
-        lineHeight: 1,
-        letterSpacing: "0.04em",
-        color: "rgba(210,230,255,0.78)",
-        transition: "color 0.2s ease",
-      }}>convra</span>
-      <span style={{
-        fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
-        fontWeight: 300,
-        fontSize: size,
-        lineHeight: 1,
-        color: "#d4a574",
-      }}>.</span>
-    </span>
-  ) : (
-    // ── Light: real PNG, white bg vanishes via multiply blend ───────
+  // Both themes now use the real PNG — dark version has transparent bg + light text
+  const src = dark ? "/convra-logo-dark.png" : "/convra-logo-crop.png";
+
+  const content = (
     <span
       className={className}
       style={{ display: "inline-block", lineHeight: 0, userSelect: "none" }}
     >
       <Image
-        src="/convra-logo-crop.png"
+        src={src}
         alt="convra."
         width={900}
         height={220}
         style={{
           height: size,
           width: `calc(${size} * ${PNG_ASPECT.toFixed(4)})`,
-          mixBlendMode: "multiply",
+          mixBlendMode: dark ? "normal" : "multiply",
           display: "block",
         }}
         priority
