@@ -54,6 +54,21 @@ import {
   Clock,
 } from "lucide-react";
 
+const VOICE_LANGUAGES = [
+  { value: "en",    label: "English",              api: "English" },
+  { value: "zh-TW", label: "繁體中文",              api: "Traditional Chinese (繁體中文)" },
+  { value: "zh-CN", label: "简体中文",              api: "Simplified Chinese (简体中文)" },
+  { value: "de",    label: "Deutsch",               api: "German (Deutsch)" },
+  { value: "es",    label: "Español",               api: "Spanish (Español)" },
+  { value: "fr",    label: "Français",              api: "French (Français)" },
+  { value: "ja",    label: "日本語",                api: "Japanese (日本語)" },
+  { value: "ko",    label: "한국어",                api: "Korean (한국어)" },
+] as const;
+
+function getVoiceLangApi(lang: string): string {
+  return VOICE_LANGUAGES.find(l => l.value === lang)?.api ?? "English";
+}
+
 const PLATFORM_RATIOS: Record<string, string> = {
   tiktok: "9:16",
   reels: "9:16",
@@ -93,6 +108,8 @@ export default function UgcStudioPage() {
     setEndFrameUrl,
     setVideoModel,
     setVoiceMode,
+    voiceLanguage,
+    setVoiceLanguage,
     setClipLength,
     setInput,
     setBrief,
@@ -139,6 +156,9 @@ export default function UgcStudioPage() {
   const [showVideoPrompt, setShowVideoPrompt] = useState(false);
   const [editedVideoPrompt, setEditedVideoPrompt] = useState<string | null>(null);
   const [enhancingPrompt, setEnhancingPrompt] = useState(false);
+  // Tracks whether we've already auto-enhanced for the current set of frames.
+  // Reset when a new brief is generated so the next storyboard triggers it again.
+  const autoEnhancedRef = useRef(false);
   const [showContentLibrary, setShowContentLibrary] = useState(false);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
@@ -152,7 +172,28 @@ export default function UgcStudioPage() {
   const currentBasePrompt = brief?.videoPrompt || "";
   useEffect(() => {
     setEditedVideoPrompt(null); // reset to use brief's prompt
+    autoEnhancedRef.current = false; // new brief → allow auto-enhance again
   }, [currentBasePrompt]);
+
+  // Auto-enhance video prompt once all keyframes are ready.
+  // This ensures the prompt always reflects the actual generated frames
+  // rather than the generic brief-time placeholder.
+  const allFramesReady =
+    keyframes.length > 0 && keyframes.every((k) => k.status === "ready");
+  useEffect(() => {
+    if (
+      allFramesReady &&
+      step === "storyboard" &&
+      brief &&
+      archetype &&
+      !enhancingPrompt &&
+      !autoEnhancedRef.current
+    ) {
+      autoEnhancedRef.current = true;
+      enhanceVideoPrompt();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allFramesReady, step]);
 
   async function enhanceVideoPrompt() {
     if (!archetype || !brief) return;
@@ -204,7 +245,7 @@ export default function UgcStudioPage() {
           stylePrompt: archetype.stylePrompt,
           motionPrompt: archetype.motionPrompt,
           script: effectiveScript,
-          language: locale === "zh-TW" ? "Traditional Chinese (繁體中文)" : locale === "de" ? "German (Deutsch)" : "English",
+          language: getVoiceLangApi(voiceLanguage),
         }),
       });
       const data = await res.json();
@@ -236,7 +277,7 @@ export default function UgcStudioPage() {
           archetypeName: archetype.name,
           archetypeFamily: archetype.family,
           voiceTone: archetype.voiceTone,
-          language: locale === "zh-TW" ? "Traditional Chinese (繁體中文)" : locale === "de" ? "German (Deutsch)" : "English",
+          language: getVoiceLangApi(voiceLanguage),
           // Pass the video prompt so the script aligns with the visual direction
           videoPrompt: editedVideoPrompt ?? brief?.videoPrompt ?? "",
         }),
@@ -424,6 +465,7 @@ export default function UgcStudioPage() {
           locale,
           videoModel,
           voiceMode: effectiveVoiceMode,
+          voiceLanguage: getVoiceLangApi(voiceLanguage),
           clipLength, // UGC v2 only — 5 (2 frames) or 10 (4 frames)
         }),
       });
@@ -951,7 +993,7 @@ EXPLICITLY AVOID
               problemSolve: activeAngle.problemSolve,
               cta: activeAngle.cta,
             } : undefined,
-            language: locale === "zh-TW" ? "Traditional Chinese (繁體中文)" : locale === "de" ? "German (Deutsch)" : "English",
+            language: getVoiceLangApi(voiceLanguage),
             creatorOverrides,
           }),
         });
@@ -982,7 +1024,7 @@ EXPLICITLY AVOID
               problemSolve: activeAngle.problemSolve,
               cta: activeAngle.cta,
             } : undefined,
-            language: locale === "zh-TW" ? "Traditional Chinese (繁體中文)" : locale === "de" ? "German (Deutsch)" : "English",
+            language: getVoiceLangApi(voiceLanguage),
             creatorOverrides,
           }),
           });
@@ -2117,6 +2159,31 @@ EXPLICITLY AVOID
                 ))}
               </div>
             </Field>
+
+            {/* Voiceover language — visible for all UGC paths (Seedance native voice
+                or Kling separate TTS). Hidden for commercial (no narration). */}
+            {isUgcFamily && (
+              <Field label="Voiceover Language">
+                <div className="flex flex-wrap gap-2">
+                  {VOICE_LANGUAGES.map((lang) => (
+                    <button
+                      key={lang.value}
+                      onClick={() => setVoiceLanguage(lang.value)}
+                      className={`px-3 py-1.5 text-sm rounded-lg border transition-all ${
+                        voiceLanguage === lang.value
+                          ? "bg-primary text-white border-primary"
+                          : "border-border hover:border-border-hover"
+                      }`}
+                    >
+                      {lang.label}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-muted mt-1.5">
+                  Independent from the UI language — sets the language of the spoken voiceover.
+                </p>
+              </Field>
+            )}
             <Field label={t("ugc.brief.script")}>
               <textarea
                 value={input.userScript}

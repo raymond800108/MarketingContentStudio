@@ -271,6 +271,8 @@ interface UgcStore {
   endFrameUrl: string | null;
   videoModel: VideoModel;
   voiceMode: VoiceMode;
+  /** Language for TTS voiceover — independent of the UI language toggle. */
+  voiceLanguage: string;
   /** UGC v2 only — target clip length in seconds.
    *    5  → 2 anchored frames, 1 Seedance call, single clip
    *   10  → 4 anchored frames, 2 parallel Seedance calls, stitched together */
@@ -300,6 +302,7 @@ interface UgcStore {
   setEndFrameUrl: (url: string | null) => void;
   setVideoModel: (m: VideoModel) => void;
   setVoiceMode: (m: VoiceMode) => void;
+  setVoiceLanguage: (lang: string) => void;
   setClipLength: (sec: 5 | 10) => void;
   setInput: (patch: Partial<UgcInput>) => void;
   setBrief: (brief: CreativeBrief | null) => void;
@@ -340,6 +343,7 @@ export const useUgcStore = create<UgcStore>()(
       endFrameUrl: null,
       videoModel: "seedance-2-fast",
       voiceMode: "voiceover",
+      voiceLanguage: "en",
       clipLength: 5,
       input: INITIAL_INPUT,
       brief: null,
@@ -367,6 +371,7 @@ export const useUgcStore = create<UgcStore>()(
       setVideoModel: (videoModel) => set({ videoModel }),
       setClipLength: (clipLength) => set({ clipLength }),
       setVoiceMode: (voiceMode) => set({ voiceMode }),
+      setVoiceLanguage: (voiceLanguage) => set({ voiceLanguage }),
       setInput: (patch) => set((s) => ({ input: { ...s.input, ...patch } })),
       setBrief: (brief) => set({ brief }),
       setSelectedAngle: (i) =>
@@ -391,6 +396,7 @@ export const useUgcStore = create<UgcStore>()(
           endFrameUrl: null,
           videoModel: "seedance-2-fast",
           voiceMode: "voiceover",
+          voiceLanguage: "en",
           clipLength: 5,
           input: INITIAL_INPUT,
           brief: null,
