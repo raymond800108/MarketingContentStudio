@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import Image from "next/image";
 
 interface ConvraLogoProps {
@@ -8,7 +7,7 @@ interface ConvraLogoProps {
   size?: string;
   /** Dark background? Light → PNG with multiply blend. Dark → CSS wordmark. */
   dark?: boolean;
-  /** Wrap in an anchor to convra.net. Default true. */
+  /** Wrap in an anchor to convra.net. Default false. */
   linked?: boolean;
   className?: string;
 }
@@ -27,7 +26,7 @@ const PNG_ASPECT = 900 / 220; // width / height
 export default function ConvraLogo({
   size = "1.4rem",
   dark = true,
-  linked = true,
+  linked = false,
   className = "",
 }: ConvraLogoProps) {
   const content = (
@@ -57,16 +56,5 @@ export default function ConvraLogo({
     </span>
   );
 
-  if (!linked) return content;
-
-  return (
-    <Link
-      href="https://convra.net"
-      target="_blank"
-      rel="noopener noreferrer"
-      style={{ textDecoration: "none", display: "inline-flex" }}
-    >
-      {content}
-    </Link>
-  );
+  return content;
 }
