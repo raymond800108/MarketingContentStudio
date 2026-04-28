@@ -30,24 +30,26 @@ export default function ConvraLogo({
   linked = true,
   className = "",
 }: ConvraLogoProps) {
-  // Both themes now use the real PNG — dark version has transparent bg + light text
-  const src = dark ? "/convra-logo-dark.png" : "/convra-logo-crop.png";
-
   const content = (
     <span
       className={className}
       style={{ display: "inline-block", lineHeight: 0, userSelect: "none" }}
     >
       <Image
-        src={src}
+        src="/convra-logo-crop.png"
         alt="convra."
         width={900}
         height={220}
         style={{
           height: size,
           width: `calc(${size} * ${PNG_ASPECT.toFixed(4)})`,
-          mixBlendMode: dark ? "normal" : "multiply",
           display: "block",
+          // Light: multiply removes white bg cleanly
+          // Dark:  invert(white→black) + hue-rotate(tan blue→back to warm orange)
+          //        then screen blend makes the black fully transparent
+          ...(dark
+            ? { filter: "invert(1) hue-rotate(180deg)", mixBlendMode: "screen" }
+            : { mixBlendMode: "multiply" }),
         }}
         priority
         unoptimized
