@@ -135,6 +135,7 @@ export default function UgcStudioPage() {
   const [uploading, setUploading] = useState(false);
   const [briefing, setBriefing] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
+  const [productExpired, setProductExpired] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const [showVideoPrompt, setShowVideoPrompt] = useState(false);
   const [editedVideoPrompt, setEditedVideoPrompt] = useState<string | null>(null);
@@ -391,6 +392,7 @@ export default function UgcStudioPage() {
     try {
       const url = await uploadFile(file);
       setProductImageUrl(url);
+      setProductExpired(false); // clear expiry notice on successful re-upload
     } catch (e) {
       setGenError(e instanceof Error ? e.message : t("ugc.err.uploadFailed"));
     } finally {
@@ -429,12 +431,13 @@ export default function UgcStudioPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        // Expired product image — clear the stale URL and send user back to
-        // re-upload so they aren't stuck with a useless error banner.
+        // Expired product image — clear the stale URL, navigate back to product
+        // step, and show an inline notice (not a generic error banner).
         if (data.error === "PRODUCT_IMAGE_EXPIRED") {
           setProductImageUrl(null);
+          setProductExpired(true);
+          setGenError(null);
           setStep("product");
-          setGenError("Your product image link expired. Please re-upload your photo.");
           return;
         }
         throw new Error(data.error || t("ugc.err.briefFailed"));
@@ -1718,6 +1721,14 @@ EXPLICITLY AVOID
       {/* ─── Step 3: Product upload ─── */}
       {step === "product" && archetype && (
         <div>
+          {productExpired && (
+            <div className="mb-4 flex items-start gap-3 rounded-lg border border-amber-400/40 bg-amber-50 dark:bg-amber-900/20 px-4 py-3 text-sm text-amber-800 dark:text-amber-300">
+              <span className="text-base leading-none mt-0.5">⚠️</span>
+              <div>
+                <span className="font-semibold">Product image expired.</span> Temporary upload links expire after a short period. Please re-upload your product photo to continue.
+              </div>
+            </div>
+          )}
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold">{t("ugc.product.upload")}</h2>
             <button onClick={() => setStep("archetype")} className="text-sm text-muted hover:text-foreground flex items-center gap-1">
