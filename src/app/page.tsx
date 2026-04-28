@@ -193,9 +193,16 @@ function LandingPage() {
     <div className="min-h-screen flex flex-col bg-background">
       {/* ─── Top nav ─────────────────────────────────── */}
       <nav className="flex items-center justify-between px-6 py-4 border-b border-border/50">
-        <div className="flex items-center gap-2 font-semibold tracking-tight text-lg">
-          <Sparkles className="w-5 h-5 text-accent" />
-          <span>Studio</span>
+        <div className="flex items-baseline gap-0">
+          <span style={{
+            fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
+            fontWeight: 300,
+            fontSize: "1.25rem",
+            lineHeight: 1,
+            letterSpacing: "0.02em",
+            color: isDark ? "rgba(200,225,255,0.75)" : "#7c7c7c",
+          }}>convra</span>
+          <span style={{ color: "#d4a574", fontWeight: 300, fontSize: "1.25rem", lineHeight: 1 }}>.</span>
         </div>
         <div className="flex items-center gap-2">
           <div className="relative">

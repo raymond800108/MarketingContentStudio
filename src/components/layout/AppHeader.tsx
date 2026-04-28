@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Sparkles, Share2, LayoutDashboard, ChevronDown, Languages, KanbanSquare, Clapperboard, Camera, Sun, Moon } from "lucide-react";
+import { Share2, LayoutDashboard, ChevronDown, Languages, KanbanSquare, Clapperboard, Camera, Sun, Moon, Sparkles } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useProfileStore } from "@/lib/stores/profile-store";
 import { getProfile, PROFILE_LIST } from "@/lib/profiles";
@@ -86,35 +86,20 @@ export default function AppHeader() {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-3">
 
-        {/* ── Logo ── */}
-        <Link href="/studio" className="flex items-center gap-2.5 group" style={{ textDecoration: "none" }}>
-          <div style={{
-            width: 32, height: 32,
-            borderRadius: 8,
-            background: isDark
-              ? "linear-gradient(135deg, #0891b2, #06b6d4)"
-              : "linear-gradient(135deg, #ea6420, #f97316)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            boxShadow: isDark
-              ? "0 0 16px rgba(6,182,212,0.4), inset 0 1px 0 rgba(255,255,255,0.15)"
-              : "0 0 16px rgba(234,100,30,0.35), inset 0 1px 0 rgba(255,255,255,0.2)",
-            transition: "all 0.3s ease",
-          }}
-            className="group-hover:scale-105"
-          >
-            <Sparkles className="w-4 h-4" style={{ color: isDark ? "#030b18" : "#ffffff" }} />
-          </div>
+        {/* ── convra. wordmark ── */}
+        <Link href="/studio" style={{ textDecoration: "none", display: "inline-flex", alignItems: "baseline", gap: 0 }}>
           <span style={{
-            fontFamily: isDark ? "'Orbitron', monospace" : "'Playfair Display', Georgia, serif",
-            fontWeight: isDark ? 700 : 700,
-            fontSize: isDark ? "0.85rem" : "1rem",
-            letterSpacing: isDark ? "0.12em" : "0.01em",
-            color: isDark ? "#06b6d4" : "#ea6420",
-            textShadow: isDark ? "0 0 12px rgba(6,182,212,0.5)" : "none",
-            transition: "all 0.3s ease",
+            fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
+            fontWeight: 300,
+            fontSize: "1.25rem",
+            lineHeight: 1,
+            letterSpacing: "0.02em",
+            color: isDark ? "rgba(200,225,255,0.75)" : "#7c7c7c",
+            transition: "color 0.25s ease",
           }}>
-            {brandTitle}
+            convra
           </span>
+          <span style={{ color: "#d4a574", fontWeight: 300, fontSize: "1.25rem", lineHeight: 1 }}>.</span>
         </Link>
 
         {/* ── Nav ── */}
