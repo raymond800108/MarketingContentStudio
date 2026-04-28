@@ -10,21 +10,19 @@ import { useT, useTMaybe, useI18nStore, LOCALE_LABELS, LOCALE_NAMES, type Locale
 import UserMenu from "@/components/UserMenu";
 import { useAuth } from "@/lib/useAuth";
 
-// Per-user brand title shown in the header. Matched by email (case-insensitive).
-// Falls back to "Studio" for users not listed, or "Admin" for role=admin.
 const USER_BRAND_TITLES: Record<string, string> = {
-  "necksy.de@gmail.com": "Necksy",
-  "luisaschreyer0526@gmail.com": "Innery",
-  "tianjia.hsieh@gmail.com": "jialab",
+  "necksy.de@gmail.com":       "NECKSY",
+  "luisaschreyer0526@gmail.com": "INNERY",
+  "tianjia.hsieh@gmail.com":   "JIALAB",
 };
 
 function getBrandTitleForUser(email: string | null | undefined, role: string | null | undefined): string {
-  if (role === "admin") return "Admin";
+  if (role === "admin") return "ADMIN";
   if (email) {
     const key = email.toLowerCase();
     if (USER_BRAND_TITLES[key]) return USER_BRAND_TITLES[key];
   }
-  return "Studio";
+  return "STUDIO";
 }
 
 const LOCALES: Locale[] = ["en", "zh-TW", "de"];
@@ -39,79 +37,181 @@ export default function AppHeader() {
   const tM = useTMaybe();
   const { locale, setLocale } = useI18nStore();
   const { user } = useAuth();
-  // User-specific brand title (Admin / Innery / Necksy / Studio) takes
-  // precedence over per-user custom brandAssets.name if the user hasn't set one.
-  const brandTitle = brandAssets.name || getBrandTitleForUser(user?.email, user?.role);
+  const brandTitle = brandAssets.name?.toUpperCase() || getBrandTitleForUser(user?.email, user?.role);
 
   const NAV_ITEMS = [
-    { href: "/studio", labelKey: "nav.studio" as const, icon: Sparkles },
-    { href: "/ugc", labelKey: "nav.ugc" as const, icon: Clapperboard },
-    { href: "/orbit", labelKey: "nav.orbit" as const, icon: Camera },
-    { href: "/social", labelKey: "nav.social" as const, icon: Share2 },
+    { href: "/studio",    labelKey: "nav.studio"    as const, icon: Sparkles },
+    { href: "/ugc",       labelKey: "nav.ugc"       as const, icon: Clapperboard },
+    { href: "/orbit",     labelKey: "nav.orbit"     as const, icon: Camera },
+    { href: "/social",    labelKey: "nav.social"    as const, icon: Share2 },
     { href: "/dashboard", labelKey: "nav.dashboard" as const, icon: LayoutDashboard },
-    { href: "/tasks", labelKey: "nav.tasks" as const, icon: KanbanSquare },
+    { href: "/tasks",     labelKey: "nav.tasks"     as const, icon: KanbanSquare },
   ];
 
   return (
-    <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-md border-b border-border">
+    <header
+      style={{
+        position: "sticky",
+        top: 0,
+        zIndex: 50,
+        background: "rgba(3, 11, 24, 0.88)",
+        backdropFilter: "blur(24px) saturate(1.6)",
+        borderBottom: "1px solid rgba(6, 182, 212, 0.12)",
+        boxShadow: "0 1px 0 rgba(6, 182, 212, 0.06), 0 4px 32px rgba(0,0,0,0.4)",
+      }}
+    >
+      {/* Subtle top accent line */}
+      <div style={{
+        position: "absolute",
+        top: 0, left: 0, right: 0,
+        height: "1px",
+        background: "linear-gradient(90deg, transparent 0%, rgba(6,182,212,0.5) 20%, rgba(124,58,237,0.5) 80%, transparent 100%)",
+      }} />
+
       <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-3">
-        {/* Logo */}
-        <Link href="/studio" className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-accent flex items-center justify-center">
-            <Sparkles className="w-4 h-4 text-white" />
+
+        {/* ── Logo ── */}
+        <Link href="/studio" className="flex items-center gap-2.5 group" style={{ textDecoration: "none" }}>
+          <div style={{
+            width: 32, height: 32,
+            borderRadius: 8,
+            background: "linear-gradient(135deg, #0891b2, #06b6d4)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            boxShadow: "0 0 16px rgba(6,182,212,0.4), inset 0 1px 0 rgba(255,255,255,0.15)",
+            transition: "box-shadow 0.2s ease, transform 0.2s ease",
+          }}
+            className="group-hover:scale-105"
+          >
+            <Sparkles className="w-4 h-4" style={{ color: "#030b18" }} />
           </div>
-          <span className="text-lg font-semibold tracking-tight">
+          <span style={{
+            fontFamily: "'Orbitron', monospace",
+            fontWeight: 700,
+            fontSize: "0.85rem",
+            letterSpacing: "0.12em",
+            color: "#06b6d4",
+            textShadow: "0 0 12px rgba(6,182,212,0.5)",
+          }}>
             {brandTitle}
           </span>
         </Link>
 
-        {/* Nav */}
-        <nav className="flex items-center gap-1 bg-card rounded-full border border-border px-1 py-1">
+        {/* ── Nav ── */}
+        <nav style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 2,
+          background: "rgba(6, 18, 32, 0.8)",
+          borderRadius: 10,
+          border: "1px solid rgba(6, 182, 212, 0.1)",
+          padding: "3px 4px",
+          backdropFilter: "blur(8px)",
+        }}>
           {NAV_ITEMS.map(({ href, labelKey, icon: Icon }) => {
             const active = pathname.startsWith(href);
             return (
               <Link
                 key={href}
                 href={href}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all whitespace-nowrap ${
-                  active
-                    ? "bg-primary text-white"
-                    : "text-muted hover:text-foreground"
-                }`}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 5,
+                  padding: "5px 10px",
+                  borderRadius: 7,
+                  fontSize: "0.8rem",
+                  fontWeight: active ? 600 : 400,
+                  fontFamily: "'Syne', sans-serif",
+                  letterSpacing: "0.02em",
+                  textDecoration: "none",
+                  transition: "all 0.18s ease",
+                  whiteSpace: "nowrap",
+                  background: active
+                    ? "linear-gradient(135deg, rgba(6,182,212,0.2), rgba(6,182,212,0.12))"
+                    : "transparent",
+                  color: active ? "#06b6d4" : "rgba(100,160,200,0.7)",
+                  boxShadow: active
+                    ? "0 0 12px rgba(6,182,212,0.2), inset 0 0 0 1px rgba(6,182,212,0.25)"
+                    : "none",
+                  textShadow: active ? "0 0 8px rgba(6,182,212,0.5)" : "none",
+                }}
+                onMouseEnter={(e) => {
+                  if (!active) (e.currentTarget as HTMLElement).style.color = "#c8e6ff";
+                }}
+                onMouseLeave={(e) => {
+                  if (!active) (e.currentTarget as HTMLElement).style.color = "rgba(100,160,200,0.7)";
+                }}
               >
-                <Icon className="w-3.5 h-3.5" />
+                <Icon style={{ width: 13, height: 13 }} />
                 {t(labelKey)}
               </Link>
             );
           })}
         </nav>
 
+        {/* ── Right controls ── */}
         <div className="flex items-center gap-2">
           <UserMenu />
+
           {/* Language toggle */}
           <div className="relative">
             <button
               onClick={() => setLangOpen(!langOpen)}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border hover:border-border-hover transition-colors text-sm"
+              style={{
+                display: "flex", alignItems: "center", gap: 5,
+                padding: "5px 10px",
+                borderRadius: 7,
+                border: "1px solid rgba(6,182,212,0.15)",
+                background: "rgba(6,18,32,0.6)",
+                color: "rgba(100,160,200,0.8)",
+                fontSize: "0.75rem",
+                fontFamily: "'Space Mono', monospace",
+                cursor: "pointer",
+                transition: "all 0.18s ease",
+              }}
             >
-              <Languages className="w-3.5 h-3.5 text-muted" />
-              <span className="text-xs font-medium">{LOCALE_LABELS[locale]}</span>
+              <Languages style={{ width: 13, height: 13 }} />
+              <span>{LOCALE_LABELS[locale]}</span>
             </button>
 
             {langOpen && (
               <>
                 <div className="fixed inset-0 z-40" onClick={() => setLangOpen(false)} />
-                <div className="absolute right-0 top-full mt-2 w-40 bg-card rounded-xl border border-border shadow-lg z-50 py-1">
+                <div style={{
+                  position: "absolute",
+                  right: 0, top: "calc(100% + 8px)",
+                  width: 160,
+                  background: "rgba(7, 18, 32, 0.97)",
+                  border: "1px solid rgba(6,182,212,0.18)",
+                  borderRadius: 10,
+                  boxShadow: "0 16px 48px rgba(0,0,0,0.6), 0 0 20px rgba(6,182,212,0.08)",
+                  zIndex: 50,
+                  padding: "4px",
+                  backdropFilter: "blur(20px)",
+                }}>
                   {LOCALES.map((loc) => (
                     <button
                       key={loc}
                       onClick={() => { setLocale(loc); setLangOpen(false); }}
-                      className={`w-full flex items-center justify-between px-4 py-2 text-sm text-left hover:bg-card-hover transition-colors ${
-                        loc === locale ? "bg-card-hover font-medium" : ""
-                      }`}
+                      style={{
+                        width: "100%",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        padding: "8px 12px",
+                        fontSize: "0.8rem",
+                        fontFamily: "'Syne', sans-serif",
+                        textAlign: "left",
+                        cursor: "pointer",
+                        borderRadius: 7,
+                        border: "none",
+                        background: loc === locale ? "rgba(6,182,212,0.1)" : "transparent",
+                        color: loc === locale ? "#06b6d4" : "rgba(200,230,255,0.7)",
+                        transition: "all 0.15s ease",
+                      }}
                     >
                       <span>{LOCALE_NAMES[loc]}</span>
-                      <span className="text-xs text-muted">{LOCALE_LABELS[loc]}</span>
+                      <span style={{ fontSize: "0.7rem", color: "rgba(100,160,200,0.6)", fontFamily: "'Space Mono', monospace" }}>{LOCALE_LABELS[loc]}</span>
                     </button>
                   ))}
                 </div>
@@ -123,49 +223,99 @@ export default function AppHeader() {
           <div className="relative">
             <button
               onClick={() => setProfileOpen(!profileOpen)}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border hover:border-border-hover transition-colors text-sm"
+              style={{
+                display: "flex", alignItems: "center", gap: 6,
+                padding: "5px 10px",
+                borderRadius: 7,
+                border: "1px solid rgba(6,182,212,0.15)",
+                background: "rgba(6,18,32,0.6)",
+                color: "rgba(200,230,255,0.8)",
+                fontSize: "0.8rem",
+                fontFamily: "'Syne', sans-serif",
+                cursor: "pointer",
+                transition: "all 0.18s ease",
+              }}
             >
               {profile ? (
                 <>
-                  <span>{profile.icon}</span>
-                  <span className="hidden sm:inline text-foreground/80">{tM(`profile.${profile.id}`, profile.name)}</span>
+                  <span style={{ fontSize: "0.95rem" }}>{profile.icon}</span>
+                  <span className="hidden sm:inline" style={{ fontSize: "0.8rem" }}>
+                    {tM(`profile.${profile.id}`, profile.name)}
+                  </span>
                 </>
               ) : (
-                <span className="text-muted">{t("nav.noProfile")}</span>
+                <span style={{ color: "rgba(100,160,200,0.5)" }}>{t("nav.noProfile")}</span>
               )}
-              <ChevronDown className="w-3.5 h-3.5 text-muted" />
+              <ChevronDown style={{ width: 13, height: 13, color: "rgba(100,160,200,0.5)" }} />
             </button>
 
             {profileOpen && (
               <>
-                <div
-                  className="fixed inset-0 z-40"
-                  onClick={() => setProfileOpen(false)}
-                />
-                <div className="absolute right-0 top-full mt-2 w-56 bg-card rounded-xl border border-border shadow-lg z-50 py-1 overflow-hidden">
+                <div className="fixed inset-0 z-40" onClick={() => setProfileOpen(false)} />
+                <div style={{
+                  position: "absolute",
+                  right: 0, top: "calc(100% + 8px)",
+                  width: 220,
+                  background: "rgba(7, 18, 32, 0.97)",
+                  border: "1px solid rgba(6,182,212,0.18)",
+                  borderRadius: 10,
+                  boxShadow: "0 16px 48px rgba(0,0,0,0.6), 0 0 20px rgba(6,182,212,0.08)",
+                  zIndex: 50,
+                  padding: "4px",
+                  backdropFilter: "blur(20px)",
+                }}>
                   {PROFILE_LIST.map((p) => (
                     <button
                       key={p.id}
-                      onClick={() => {
-                        setActiveProfile(p.id);
-                        setProfileOpen(false);
+                      onClick={() => { setActiveProfile(p.id); setProfileOpen(false); }}
+                      style={{
+                        width: "100%",
+                        display: "flex", alignItems: "center", gap: 10,
+                        padding: "9px 12px",
+                        textAlign: "left",
+                        cursor: "pointer",
+                        borderRadius: 7,
+                        border: "none",
+                        background: p.id === activeProfileId ? "rgba(6,182,212,0.1)" : "transparent",
+                        transition: "all 0.15s ease",
                       }}
-                      className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm text-left hover:bg-card-hover transition-colors ${
-                        p.id === activeProfileId ? "bg-card-hover font-medium" : ""
-                      }`}
                     >
-                      <span className="text-lg shrink-0">{p.icon}</span>
-                      <div className="min-w-0">
-                        <div className="font-medium truncate">{tM(`profile.${p.id}`, p.name)}</div>
-                        <div className="text-[11px] text-muted truncate">{tM(`profile.${p.id}.desc`, p.description)}</div>
+                      <span style={{ fontSize: "1.1rem", flexShrink: 0 }}>{p.icon}</span>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{
+                          fontFamily: "'Syne', sans-serif",
+                          fontWeight: p.id === activeProfileId ? 600 : 400,
+                          fontSize: "0.82rem",
+                          color: p.id === activeProfileId ? "#06b6d4" : "rgba(200,230,255,0.85)",
+                          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                        }}>
+                          {tM(`profile.${p.id}`, p.name)}
+                        </div>
+                        <div style={{
+                          fontSize: "0.7rem",
+                          color: "rgba(100,160,200,0.5)",
+                          fontFamily: "'Space Mono', monospace",
+                          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                        }}>
+                          {tM(`profile.${p.id}.desc`, p.description)}
+                        </div>
                       </div>
                     </button>
                   ))}
-                  <div className="border-t border-border mt-1 pt-1">
+                  <div style={{ borderTop: "1px solid rgba(6,182,212,0.1)", marginTop: 4, paddingTop: 4 }}>
                     <Link
                       href="/onboarding"
                       onClick={() => setProfileOpen(false)}
-                      className="block px-4 py-2 text-sm text-muted hover:text-foreground hover:bg-card-hover transition-colors"
+                      style={{
+                        display: "block",
+                        padding: "8px 12px",
+                        fontSize: "0.8rem",
+                        fontFamily: "'Syne', sans-serif",
+                        color: "rgba(100,160,200,0.6)",
+                        textDecoration: "none",
+                        borderRadius: 7,
+                        transition: "all 0.15s ease",
+                      }}
                     >
                       {t("nav.changeCategory")}
                     </Link>
