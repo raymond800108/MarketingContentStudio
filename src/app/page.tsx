@@ -305,6 +305,11 @@ function LandingPage() {
       {/* ─── HERO — input as hero ────────────────────── */}
       <section className="px-6 py-10 sm:py-16 max-w-6xl w-full mx-auto">
 
+        {/* Big logo above headline */}
+        <div style={{ textAlign: "center", marginBottom: "2.5rem" }}>
+          <ConvraLogo size="clamp(4rem, 10vw, 7rem)" dark={isDark} />
+        </div>
+
         <h1 className="text-4xl sm:text-6xl font-bold tracking-tight text-center max-w-3xl mx-auto leading-tight">
           {tM("landing.hero.headline", "Turn a product photo into a viral video ad.")}
         </h1>
@@ -687,9 +692,6 @@ function LandingPage() {
 
         {/* convra. logo + model strip + tags */}
         <div style={{ textAlign: "center", marginBottom: "3rem" }}>
-
-          {/* Logo */}
-          <ConvraLogo size="clamp(2.6rem, 6vw, 4.5rem)" dark={isDark} />
 
           {/* Powered-by model strip */}
           <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "center", gap: "6px 10px", marginTop: "1rem" }}>
