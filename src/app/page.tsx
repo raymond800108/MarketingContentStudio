@@ -36,7 +36,10 @@ import {
   Video,
   Check,
   Loader2,
+  Sun,
+  Moon,
 } from "lucide-react";
+import { useThemeStore } from "@/lib/stores/theme-store";
 import {
   useT,
   useTMaybe,
@@ -112,6 +115,8 @@ function LandingPage() {
   const t = useT();
   const tM = useTMaybe();
   const { locale, setLocale } = useI18nStore();
+  const { theme, toggle: toggleTheme } = useThemeStore();
+  const isDark = theme === "dark";
   const [langOpen, setLangOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
@@ -224,6 +229,48 @@ function LandingPage() {
               </>
             )}
           </div>
+          {/* Theme toggle */}
+          <button
+            onClick={toggleTheme}
+            title={isDark ? "Switch to Solar Pulse" : "Switch to Neural Interface"}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 32,
+              height: 32,
+              borderRadius: 8,
+              border: isDark
+                ? "1px solid rgba(6,182,212,0.2)"
+                : "1px solid rgba(234,100,30,0.2)",
+              background: isDark
+                ? "rgba(6,18,32,0.7)"
+                : "rgba(255,250,245,0.85)",
+              cursor: "pointer",
+              transition: "all 0.25s ease",
+              position: "relative",
+              overflow: "hidden",
+              flexShrink: 0,
+            }}
+          >
+            <span style={{
+              position: "absolute",
+              transition: "transform 0.35s cubic-bezier(0.34,1.56,0.64,1), opacity 0.25s ease",
+              transform: isDark ? "translateY(0) rotate(0deg)" : "translateY(-120%) rotate(-30deg)",
+              opacity: isDark ? 1 : 0,
+            }}>
+              <Moon style={{ width: 14, height: 14, color: "#06b6d4" }} />
+            </span>
+            <span style={{
+              position: "absolute",
+              transition: "transform 0.35s cubic-bezier(0.34,1.56,0.64,1), opacity 0.25s ease",
+              transform: isDark ? "translateY(120%) rotate(30deg)" : "translateY(0) rotate(0deg)",
+              opacity: isDark ? 0 : 1,
+            }}>
+              <Sun style={{ width: 14, height: 14, color: "#ea6420" }} />
+            </span>
+          </button>
+
           {!user ? (
             <a
               href="/api/auth/google"
