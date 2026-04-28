@@ -17,6 +17,8 @@ import type { ArchetypeFamily } from "@/lib/ugc/archetypes";
 export type UgcStep =
   | "family"
   | "archetype"
+  | "style"
+  | "model"
   | "product"
   | "brief"
   | "storyboard"

@@ -24,6 +24,7 @@ import {
   type ArchetypeFamily,
 } from "@/lib/ugc/archetypes";
 import { useUgcStore, type Keyframe, type VideoModel, type VoiceMode, type CreatorGender, type CreatorRace, type CreatorHairColor, type CreatorEyeColor, VIDEO_MODEL_COST_USD, getActiveAngle } from "@/lib/stores/ugc-store";
+import { getAdPath, isUgcPath, isSeedancePath, isV2Path, isLongPath, PATH_CONFIG, type AdPath, type PathConfig } from "@/lib/ugc/ad-paths";
 import { useUIStore } from "@/lib/stores/ui-store";
 import { trackApiCall, calcVideoCost } from "@/lib/stores/api-usage-store";
 import { useGenerationStore } from "@/lib/stores/generation-store";
@@ -107,18 +108,16 @@ export default function UgcStudioPage() {
     reset,
   } = useUgcStore();
 
-  const isSeedance = videoModel === "seedance-2" || videoModel === "seedance-2-fast";
-  // Only the UGC family uses voiceover/TTS. Commercial + Cinematic are
-  // product/visual-only and do not carry any audio narration — they're
-  // treated as if "text-overlay" mode is permanently on.
-  const isVoiceoverFamily = family === "ugc";
-  // Kling = visual + music only. No TTS, no script, no marketing angles shown.
-  // Seedance UGC = voiceover baked in natively; respects the user's toggle.
-  const effectiveVoiceMode: VoiceMode = !isVoiceoverFamily
-    ? "text-overlay"
-    : !isSeedance
-    ? "text-overlay"   // Kling: music-only, never generate TTS
-    : voiceMode;
+  // Single path derivation — replaces all isUgcV2/isSeedance/isVoiceoverFamily conditions
+  const adPath = getAdPath(family, videoModel, clipLength);
+  const cfg = PATH_CONFIG[adPath];
+  const isSeedance = isSeedancePath(adPath);
+  const isUgcFamily = isUgcPath(adPath);
+  const isUgcV2 = isV2Path(adPath);
+  const isUgcV2Long = isLongPath(adPath);
+  // Keep these aliases for backward compat with the rest of the page
+  const isVoiceoverFamily = isUgcFamily;
+  const effectiveVoiceMode: VoiceMode = cfg.voiceToggleAvailable ? voiceMode : "text-overlay";
   const activeAngle = getActiveAngle(brief);
   const spokenLine = activeAngle?.fullScript || "";
 
@@ -162,7 +161,6 @@ export default function UgcStudioPage() {
       // UGC v2 — use the per-frame dialogue endpoint that produces a Seedance-
       // formatted prompt with [Image1]/[Image2] tokens and inline spoken lines
       // so generate_audio produces the right voice with rough lip-sync.
-      const isUgcV2 = family === "ugc" && isSeedance;
       if (isUgcV2) {
         const openingDialogue =
           keyframes[0]?.dialogue || activeAngle?.openingLine || "";
@@ -447,7 +445,7 @@ export default function UgcStudioPage() {
       // mode (first_frame_url + last_frame_url), 2 or 4 frames depending
       // on clipLength. Each frame uses the PREVIOUS frame's imageUrl as an
       // additional image_input to lock identity — generated sequentially.
-      const isUgcV2 = family === "ugc" && isSeedance;
+      // (isUgcV2 is derived from adPath at component level)
       // 10s uses 3 keyframes [open, MID, close]; MID plays on both sides of
       // the 5s seam → pixel-locked zero-jump boundary. 5s uses 2 [open, close].
       const ugcV2FrameCount = clipLength === 10 ? 3 : 2;
@@ -687,8 +685,7 @@ EXPLICITLY AVOID
 — Professional portrait. Editorial magazine shot. Three-point studio lighting. Symmetrical framing. Perfect centering. Clean minimalist backdrop.
 `;
 
-    const isUgcFamily = family === "ugc";
-
+    // isUgcFamily is derived at component level from adPath
     const sceneLock = useUgcStore.getState().brief?.sceneLock;
 
     // ── gpt-image-2 best-practice prompt construction (UGC only) ──
@@ -894,8 +891,7 @@ EXPLICITLY AVOID
     //   clipLength 5  → 2 frames, 1 Seedance call
     //   clipLength 10 → 3 frames [open, MID, close], 2 parallel Seedance calls
     //                   (seg1=0→1, seg2=1→2, MID pixel-locked across the seam)
-    const isUgcV2 = family === "ugc" && isSeedance;
-    const isUgcV2Long = isUgcV2 && clipLength === 10;
+    // (isUgcV2 and isUgcV2Long are derived at component level from adPath)
 
     if (isUgcV2) {
       const required = isUgcV2Long ? 3 : 2;
@@ -1495,12 +1491,17 @@ EXPLICITLY AVOID
     if (family === "cinematic") {
       setFamily(null);
       setArchetypeId(null);
-      setStep("family");
+      setStep("style");
       return;
     }
     // Auto-advance from family → archetype once family picked but archetype empty
-    if (step === "family" && family) setStep("archetype");
-  }, [step, family, setStep, setFamily, setArchetypeId]);
+    // (legacy path for existing sessions). New sessions use "style" step.
+    if (step === "family" && family && !archetypeId) setStep("archetype");
+    // If old session has step="family" with both family + archetype set, jump to model
+    if (step === "family" && family && archetypeId) setStep("model");
+    // If old session has step="archetype" with archetype set, jump to model
+    if (step === "archetype" && archetypeId) setStep("model");
+  }, [step, family, archetypeId, setStep, setFamily, setArchetypeId]);
 
   // ─── Model auto-recommendation on family / clip-length CHANGE ───
   // We nudge the user toward the right model when family or length changes,
@@ -1529,7 +1530,11 @@ EXPLICITLY AVOID
   // ─── UI ───
 
   const stepNum = (
-    { family: 1, archetype: 2, product: 3, brief: 4, storyboard: 5, video: 6, done: 6 } as const
+    {
+      style: 1, model: 2, product: 3, brief: 4, storyboard: 5, video: 6, done: 6,
+      // legacy steps map to nearest equivalent
+      family: 1, archetype: 1,
+    } as const
   )[step];
 
   return (
@@ -1557,15 +1562,15 @@ EXPLICITLY AVOID
       {/* Step progress */}
       <div className="flex items-center gap-2 mb-8 text-xs">
         {([
-          t("ugc.step.family"),
-          t("ugc.step.archetype"),
+          "Style",
+          "Model",
           t("ugc.step.product"),
           t("ugc.step.brief"),
           t("ugc.step.storyboard"),
           t("ugc.step.video"),
         ]).map((l, i) => {
           const active = stepNum === i + 1;
-          const done = stepNum > i + 1;
+          const done = (stepNum ?? 1) > i + 1;
           return (
             <div key={l} className="flex items-center gap-2">
               <div
@@ -1588,11 +1593,251 @@ EXPLICITLY AVOID
         </div>
       )}
 
-      {/* ─── Step 1: Family ─── */}
+      {/* ─── Step 1 (new): Style — combined family + archetype ─── */}
+      {(step === "style" || step === "family") && (
+        <div>
+          <h2 className="text-lg font-semibold mb-1">Choose your ad style</h2>
+          <p className="text-sm text-muted mb-6">Select a content family, then pick a creator archetype. You can customise the creator&#39;s look after selecting an archetype.</p>
+
+          {/* Family tiles */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8 max-w-3xl">
+            {(Object.keys(FAMILY_META) as ArchetypeFamily[])
+              .filter((f) => f !== "cinematic")
+              .map((f) => {
+                const meta = FAMILY_META[f];
+                const selected = family === f;
+                return (
+                  <button
+                    key={f}
+                    onClick={() => { setFamily(f); if (f !== family) setArchetypeId(null); }}
+                    className={`p-6 rounded-2xl border text-left transition-all ${
+                      selected
+                        ? "border-accent bg-accent/10 ring-2 ring-accent/30"
+                        : "border-border bg-card hover:border-accent hover:bg-card-hover"
+                    }`}
+                  >
+                    <div className="text-4xl mb-3">{meta.emoji}</div>
+                    <div className="font-semibold text-lg">{tM(`ugc.family.${f}.name`, meta.name)}</div>
+                    <div className="text-sm text-muted mt-1">{tM(`ugc.family.${f}.tagline`, meta.tagline)}</div>
+                  </button>
+                );
+              })}
+          </div>
+
+          {/* Archetype grid — shown once family is selected */}
+          {family && (
+            <div className="mb-6">
+              <h3 className="text-sm font-semibold mb-3">{t("ugc.family.pick")}</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {archetypesByFamily(family).map((a) => {
+                  const selected = archetypeId === a.id;
+                  return (
+                    <button
+                      key={a.id}
+                      onClick={() => setArchetypeId(a.id)}
+                      className={`p-4 rounded-xl border text-left transition-all ${
+                        selected
+                          ? "border-accent bg-accent/10"
+                          : "border-border bg-card hover:border-border-hover"
+                      }`}
+                    >
+                      <div className="font-medium">{tM(`ugc.arch.${a.id}.name`, a.name)}</div>
+                      <div className="text-xs text-muted mt-1">{tM(`ugc.arch.${a.id}.desc`, a.description)}</div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Creator overrides — UGC only */}
+              {archetypeId && isUgcFamily && (
+                <div className="mt-6 rounded-xl border border-border bg-card p-5">
+                  <div className="mb-1 text-sm font-semibold">{t("ugc.creator.customize")}</div>
+                  <div className="mb-4 text-xs text-muted">{t("ugc.creator.customizeHint")}</div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <Field label={t("ugc.creator.age")}>
+                      <input
+                        value={creatorOverrides.age}
+                        onChange={(e) => setCreatorOverrides({ age: e.target.value })}
+                        placeholder={t("ugc.creator.agePh")}
+                        className="inp"
+                      />
+                    </Field>
+                    <Field label={t("ugc.creator.gender")}>
+                      <div className="flex flex-wrap gap-1.5">
+                        {([
+                          { id: "any", key: "ugc.creator.gender.any" },
+                          { id: "female", key: "ugc.creator.gender.female" },
+                          { id: "male", key: "ugc.creator.gender.male" },
+                          { id: "nonbinary", key: "ugc.creator.gender.nonbinary" },
+                        ] as const).map((g) => {
+                          const active = creatorOverrides.gender === g.id;
+                          return (
+                            <button
+                              key={g.id}
+                              onClick={() => setCreatorOverrides({ gender: g.id as CreatorGender })}
+                              className={`px-2.5 py-1 text-xs rounded-md border ${
+                                active ? "bg-primary text-white border-primary" : "border-border hover:border-border-hover"
+                              }`}
+                            >
+                              {t(g.key)}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </Field>
+                    <Field label={t("ugc.creator.race")}>
+                      <select
+                        value={creatorOverrides.race}
+                        onChange={(e) => setCreatorOverrides({ race: e.target.value as CreatorRace })}
+                        className="inp"
+                      >
+                        <option value="any">{t("ugc.creator.race.any")}</option>
+                        <option value="east-asian">{t("ugc.creator.race.eastAsian")}</option>
+                        <option value="southeast-asian">{t("ugc.creator.race.seAsian")}</option>
+                        <option value="south-asian">{t("ugc.creator.race.sAsian")}</option>
+                        <option value="white">{t("ugc.creator.race.white")}</option>
+                        <option value="black">{t("ugc.creator.race.black")}</option>
+                        <option value="latino">{t("ugc.creator.race.latino")}</option>
+                        <option value="middle-eastern">{t("ugc.creator.race.middleEastern")}</option>
+                      </select>
+                    </Field>
+                  </div>
+                  <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <Field label={t("ugc.creator.hairColor")}>
+                      <select
+                        value={creatorOverrides.hairColor ?? "any"}
+                        onChange={(e) => setCreatorOverrides({ hairColor: e.target.value as CreatorHairColor })}
+                        className="inp"
+                      >
+                        <option value="any">{t("ugc.creator.hairColor.any")}</option>
+                        <option value="black">{t("ugc.creator.hairColor.black")}</option>
+                        <option value="dark-brown">{t("ugc.creator.hairColor.darkBrown")}</option>
+                        <option value="brown">{t("ugc.creator.hairColor.brown")}</option>
+                        <option value="light-brown">{t("ugc.creator.hairColor.lightBrown")}</option>
+                        <option value="blonde">{t("ugc.creator.hairColor.blonde")}</option>
+                        <option value="red">{t("ugc.creator.hairColor.red")}</option>
+                        <option value="auburn">{t("ugc.creator.hairColor.auburn")}</option>
+                        <option value="grey">{t("ugc.creator.hairColor.grey")}</option>
+                        <option value="white">{t("ugc.creator.hairColor.white")}</option>
+                        <option value="colored">{t("ugc.creator.hairColor.colored")}</option>
+                      </select>
+                    </Field>
+                    <Field label={t("ugc.creator.eyeColor")}>
+                      <select
+                        value={creatorOverrides.eyeColor ?? "any"}
+                        onChange={(e) => setCreatorOverrides({ eyeColor: e.target.value as CreatorEyeColor })}
+                        className="inp"
+                      >
+                        <option value="any">{t("ugc.creator.eyeColor.any")}</option>
+                        <option value="dark-brown">{t("ugc.creator.eyeColor.darkBrown")}</option>
+                        <option value="brown">{t("ugc.creator.eyeColor.brown")}</option>
+                        <option value="hazel">{t("ugc.creator.eyeColor.hazel")}</option>
+                        <option value="green">{t("ugc.creator.eyeColor.green")}</option>
+                        <option value="blue">{t("ugc.creator.eyeColor.blue")}</option>
+                        <option value="grey">{t("ugc.creator.eyeColor.grey")}</option>
+                      </select>
+                    </Field>
+                  </div>
+                </div>
+              )}
+
+              <div className="mt-4 flex justify-end">
+                <button
+                  onClick={() => setStep("model")}
+                  disabled={!archetypeId}
+                  className="px-4 py-2 text-sm bg-primary text-white rounded-lg flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  Next <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ─── Step 2 (new): Model ─── */}
+      {step === "model" && family && (
+        <div>
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h2 className="text-lg font-semibold">Choose your video model</h2>
+              <p className="text-sm text-muted mt-1">Each model produces a different style. Restrictions shown below.</p>
+            </div>
+            <button onClick={() => setStep("style")} className="text-sm text-muted hover:text-foreground flex items-center gap-1">
+              <ArrowLeft className="w-3.5 h-3.5" /> Back
+            </button>
+          </div>
+
+          {/* Path cards — show only paths for the selected family */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+            {(Object.entries(PATH_CONFIG) as [AdPath, PathConfig][])
+              .filter(([, c]) => c.family === family)
+              .map(([path, c]) => {
+                const isSelected = adPath === path;
+                return (
+                  <button
+                    key={path}
+                    onClick={() => {
+                      setVideoModel(c.videoModel);
+                      setClipLength(c.clipLength);
+                    }}
+                    className={`text-left p-4 rounded-xl border transition-all ${
+                      isSelected
+                        ? "border-accent bg-accent/10 ring-2 ring-accent/30"
+                        : "border-border bg-card hover:border-accent/50"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-semibold text-sm">{c.label}</span>
+                      <span className="text-xs font-mono text-muted">≈${c.costUsd.toFixed(2)}</span>
+                    </div>
+                    <p className="text-xs text-muted mb-3 leading-relaxed">{c.description}</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {c.badges.map((b) => (
+                        <span key={b} className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-background border border-border">
+                          {b}
+                        </span>
+                      ))}
+                    </div>
+                  </button>
+                );
+              })}
+          </div>
+
+          {/* What you get summary for selected path */}
+          <div className="rounded-xl border border-border bg-card p-4 mb-6">
+            <div className="text-xs font-semibold uppercase tracking-wider text-muted mb-3">What you get with {cfg.label}</div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {[
+                { label: "Duration", value: cfg.durationLabel },
+                { label: "Audio", value: cfg.audioType === "native-voiceover" ? "Creator voice" : cfg.audioType === "music-only" ? "AI music" : "Silent" },
+                { label: "Frames", value: `${cfg.frameCount} keyframes` },
+                { label: "Voice toggle", value: cfg.voiceToggleAvailable ? "Available" : "N/A" },
+              ].map(({ label, value }) => (
+                <div key={label} className="text-center p-3 rounded-lg bg-background">
+                  <div className="text-xs text-muted mb-1">{label}</div>
+                  <div className="text-sm font-semibold">{value}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <button
+            onClick={() => setStep("product")}
+            disabled={!family || !archetypeId}
+            className="w-full py-3 rounded-xl bg-accent text-white font-medium text-sm hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2"
+          >
+            Continue with {cfg.label} <ArrowRight className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* ─── Step 1 (legacy): Family ─── */}
       {/* Video Ads page exposes only UGC + Commercial. Cinematic stays
           available in the codebase (used by Studio page) but is filtered out
-          here — this page is laser-focused on conversion-optimized ad creative. */}
-      {step === "family" && (
+          here — this page is laser-focused on conversion-optimized ad creative.
+          This block remains as a fallback for existing persisted sessions. */}
+      {false && step === "family" && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-3xl mx-auto">
           {(Object.keys(FAMILY_META) as ArchetypeFamily[])
             .filter((f) => f !== "cinematic")
@@ -1769,7 +2014,7 @@ EXPLICITLY AVOID
           )}
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold">{t("ugc.product.upload")}</h2>
-            <button onClick={() => setStep("archetype")} className="text-sm text-muted hover:text-foreground flex items-center gap-1">
+            <button onClick={() => setStep("model")} className="text-sm text-muted hover:text-foreground flex items-center gap-1">
               <ArrowLeft className="w-3.5 h-3.5" /> {t("ugc.archetype.change")}
             </button>
           </div>
@@ -1828,25 +2073,8 @@ EXPLICITLY AVOID
       {/* ─── Step 4: Brief ─── */}
       {step === "brief" && archetype && productImageUrl && (
         <div>
-          {/* Family mode banner — shows which style path the user is on */}
-          {family === "ugc" && (
-            <div className="mb-4 flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-blue-500/8 border border-blue-500/25 text-sm">
-              <span className="text-base">🎥</span>
-              <div>
-                <span className="font-semibold text-blue-600 dark:text-blue-400">UGC Style</span>
-                <span className="text-muted ml-2">Creator on camera · TikTok / Reels format · creator promotes your product directly to the viewer</span>
-              </div>
-            </div>
-          )}
-          {family === "commercial" && (
-            <div className="mb-4 flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-amber-500/8 border border-amber-500/25 text-sm">
-              <span className="text-base">✨</span>
-              <div>
-                <span className="font-semibold text-amber-600 dark:text-amber-400">Commercial Style</span>
-                <span className="text-muted ml-2">No people on screen · product macro shots · ingredient details · cinematic product-hero visuals</span>
-              </div>
-            </div>
-          )}
+          {/* Path badge — shows which style + model path the user is on */}
+          <PathBadge cfg={cfg} />
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold">{t("ugc.brief.title")}</h2>
             <button onClick={() => setStep("product")} className="text-sm text-muted hover:text-foreground flex items-center gap-1">
@@ -1906,36 +2134,10 @@ EXPLICITLY AVOID
                 className="inp"
               />
             </Field>
-            <Field label={t("ugc.model.label")}>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                {([
-                  { id: "seedance-2-fast", titleKey: "ugc.model.seedanceFast.title", descKey: "ugc.model.seedanceFast.desc" },
-                  { id: "seedance-2", titleKey: "ugc.model.seedance.title", descKey: "ugc.model.seedance.desc" },
-                  { id: "kling-3.0", titleKey: "ugc.model.kling.title", descKey: "ugc.model.kling.desc" },
-                ] as const).map((m) => {
-                  const active = videoModel === m.id;
-                  return (
-                    <button
-                      key={m.id}
-                      onClick={() => setVideoModel(m.id as VideoModel)}
-                      className={`text-left p-3 rounded-lg border transition-all ${
-                        active ? "border-accent bg-accent/10" : "border-border hover:border-border-hover"
-                      }`}
-                    >
-                      <div className="text-sm font-medium flex items-center justify-between">
-                        <span>{t(m.titleKey)}</span>
-                        <span className="text-[11px] text-muted font-mono">≈${VIDEO_MODEL_COST_USD[m.id as VideoModel].toFixed(2)}</span>
-                      </div>
-                      <div className="text-[11px] text-muted mt-1 leading-snug">{t(m.descKey)}</div>
-                    </button>
-                  );
-                })}
-              </div>
-            </Field>
-            {/* Voice mode selector: only for Seedance UGC.
+            {/* Voice mode selector: only for paths with voiceToggleAvailable.
                 Kling = music-only, no voice, toggle hidden entirely.
-                Commercial/Cinematic = always text-overlay, hidden. */}
-            {isVoiceoverFamily && isSeedance && (
+                Commercial = always text-overlay, hidden. */}
+            {cfg.voiceToggleAvailable && (
               <Field label={t("ugc.voice.label")}>
                 <div className="space-y-1">
                   <div className="flex gap-2">
@@ -1958,53 +2160,10 @@ EXPLICITLY AVOID
                     })}
                   </div>
                   <div className="text-[11px] text-muted">
-                    {!isSeedance && voiceMode === "voiceover"
-                      ? "Kling videos are silent — voiceover plays as a separate audio track."
-                      : voiceMode === "text-overlay"
+                    {voiceMode === "text-overlay"
                       ? t("ugc.voice.textOverlayHint")
                       : t("ugc.voice.voiceoverHint")}
                   </div>
-                </div>
-              </Field>
-            )}
-
-            {/* Clip-length selector — UGC v2 only (UGC family + Seedance).
-                5s = 2 anchored frames, 1 Seedance call.
-                10s = 4 anchored frames, 2 parallel Seedance calls stitched
-                together. 10s costs roughly 2× and takes ~2× longer. */}
-            {isVoiceoverFamily && isSeedance && (
-              <Field label={tM("ugc.clipLength.label", "Clip length")}>
-                <div className="flex gap-2">
-                  {([
-                    { sec: 5 as const, cost: "≈$5.85" },
-                    { sec: 10 as const, cost: "≈$11.70" },
-                  ]).map((opt) => {
-                    const active = clipLength === opt.sec;
-                    return (
-                      <button
-                        key={opt.sec}
-                        onClick={() => setClipLength(opt.sec)}
-                        className={`px-3 py-1.5 text-sm rounded-lg border flex flex-col items-start gap-0 ${
-                          active ? "bg-primary text-white border-primary" : "border-border hover:border-border-hover"
-                        }`}
-                      >
-                        <span className="font-medium">
-                          {opt.sec}s
-                          <span className={`ml-1.5 text-[10px] ${active ? "text-white/80" : "text-muted"}`}>
-                            ({opt.sec === 5 ? tM("ugc.clipLength.oneSegment", "1 segment") : tM("ugc.clipLength.twoSegments", "2 stitched segments")})
-                          </span>
-                        </span>
-                        <span className={`text-[10px] font-mono ${active ? "text-white/80" : "text-muted"}`}>
-                          {opt.cost}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-                <div className="text-[11px] text-muted mt-1">
-                  {clipLength === 10
-                    ? tM("ugc.clipLength.hint10", "10s = 4 keyframes, 2 Seedance renders stitched with 200ms audio crossfade. ~2× cost and wait time.")
-                    : tM("ugc.clipLength.hint5", "5s = 2 keyframes, 1 Seedance render. Fastest and cheapest.")}
                 </div>
               </Field>
             )}
@@ -2025,20 +2184,8 @@ EXPLICITLY AVOID
       {/* ─── Step 5: Storyboard ─── */}
       {step === "storyboard" && brief && (
         <div>
-          {family === "ugc" && (
-            <div className="mb-4 flex items-center gap-2.5 px-4 py-2 rounded-xl bg-blue-500/8 border border-blue-500/25 text-xs">
-              <span>🎥</span>
-              <span className="font-semibold text-blue-600 dark:text-blue-400">UGC Style</span>
-              <span className="text-muted">· Creator on camera in every frame · TikTok / Reels</span>
-            </div>
-          )}
-          {family === "commercial" && (
-            <div className="mb-4 flex items-center gap-2.5 px-4 py-2 rounded-xl bg-amber-500/8 border border-amber-500/25 text-xs">
-              <span>✨</span>
-              <span className="font-semibold text-amber-600 dark:text-amber-400">Commercial Style</span>
-              <span className="text-muted">· Product macro · ingredient details · no people</span>
-            </div>
-          )}
+          {/* Path badge — shows which style + model path the user is on */}
+          <PathBadge cfg={cfg} />
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold">
               {isSeedance ? t("ugc.story.titleSeedance") : t("ugc.story.title")}
@@ -2172,7 +2319,7 @@ EXPLICITLY AVOID
               const selected = heroFrameIndex === k.index;
               const isDragging = dragIndex === arrIdx;
               const isDragOver = dragOverIndex === arrIdx;
-              const isUgcV2Frame = family === "ugc" && isSeedance;
+              const isUgcV2Frame = isUgcV2;
               const frameLabel = isUgcV2Frame
                 ? k.label || (arrIdx === 0 ? "Opening" : "Closing")
                 : `${t("ugc.story.frame")} ${arrIdx + 1}`;
@@ -2312,8 +2459,8 @@ EXPLICITLY AVOID
               );
             })}
 
-            {/* Append-drop slot — hidden for UGC v2 (exactly 2 frames required) */}
-            {!(family === "ugc" && isSeedance) && (
+            {/* Append-drop slot — hidden for UGC v2 paths (fixed frame count) */}
+            {!isUgcV2 && (
               <div
                 onDragOver={handleAppendDragOver}
                 onDrop={handleAppendDrop}
@@ -2441,12 +2588,8 @@ EXPLICITLY AVOID
 
           <div className="flex items-center justify-between">
             <div className="text-xs text-muted">
-              {t("ugc.model.using")}: <span className="font-medium text-foreground">{t(
-                videoModel === "seedance-2-fast" ? "ugc.model.seedanceFast.title"
-                : videoModel === "seedance-2" ? "ugc.model.seedance.title"
-                : "ugc.model.kling.title"
-              )}</span>
-              <span className="ml-2 font-mono">≈${VIDEO_MODEL_COST_USD[videoModel].toFixed(2)}</span>
+              {t("ugc.model.using")}: <span className="font-medium text-foreground">{cfg.label}</span>
+              <span className="ml-2 font-mono">≈${cfg.costUsd.toFixed(2)}</span>
             </div>
             <button
               onClick={generateVideoAndTts}
@@ -2602,6 +2745,21 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <div className="text-xs font-medium text-muted mb-1.5">{label}</div>
       {children}
     </label>
+  );
+}
+
+function PathBadge({ cfg }: { cfg: PathConfig }) {
+  return (
+    <div className={`mb-3 px-3 py-2 rounded-lg text-xs font-medium flex items-center gap-2 ${
+      cfg.family === "ugc"
+        ? "bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20"
+        : "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20"
+    }`}>
+      {cfg.family === "ugc" ? "🎥" : "✨"}
+      <span>{cfg.label}</span>
+      <span className="text-muted">·</span>
+      <span>{cfg.description}</span>
+    </div>
   );
 }
 
