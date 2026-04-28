@@ -1297,7 +1297,15 @@ EXPLICITLY AVOID
     }
   }
 
-  async function addMusicToVideo(silentVideoUrl: string) {
+  /**
+   * Add background music to a silent video via MMAudio.
+   * `saveHistory` — called with the FINAL url once we know whether music
+   * succeeded or not (so content history always stores the audio version).
+   */
+  async function addMusicToVideo(
+    silentVideoUrl: string,
+    saveHistory?: (finalUrl: string) => void
+  ) {
     const st = useUgcStore.getState();
     useUgcStore.getState().setMusic({ musicStatus: "pending", musicError: null, musicRequestId: null });
     try {
@@ -1328,6 +1336,8 @@ EXPLICITLY AVOID
           useUgcStore.getState().setMusic({ musicStatus: "ready", musicError: null });
           // Replace silent video URL with the audio-enhanced version
           useUgcStore.getState().setVideo({ videoUrl: pd.videoUrl });
+          // Save history with the audio-enhanced URL
+          saveHistory?.(pd.videoUrl);
           return;
         }
         if (pd.status === "fail") {
@@ -1339,7 +1349,8 @@ EXPLICITLY AVOID
       const msg = e instanceof Error ? e.message : "Music failed";
       console.warn("[ugc/music]", msg);
       useUgcStore.getState().setMusic({ musicStatus: "error", musicError: msg });
-      // Non-fatal — keep the silent video
+      // Non-fatal — keep the silent video, still save history with silent URL
+      saveHistory?.(silentVideoUrl);
     }
   }
 
@@ -1361,36 +1372,46 @@ EXPLICITLY AVOID
           // Overlay text (if any) was baked into the video prompt, so the
           // returned video already has the text rendered by the model.
           useUgcStore.getState().setVideo({ videoStatus: "ready", videoUrl: vidUrl });
-          // Add background music via MMAudio when the video has no native audio:
-          //   - Kling: always silent (sound: false)
-          //   - Seedance text-overlay: generate_audio was false
-          //   - Seedance commercial family: no voiceover, silent
+
           const stForMusic = useUgcStore.getState();
           const isTextOverlayMode =
             stForMusic.family !== "ugc" || stForMusic.voiceMode === "text-overlay";
-          if (!seedance || isTextOverlayMode) {
-            addMusicToVideo(vidUrl);
+          const willAddMusic = !seedance || isTextOverlayMode;
+
+          // Helper that saves the final video URL to content history.
+          // For Kling/music paths, this is called by addMusicToVideo once the
+          // audio-enhanced URL is known — so the dashboard always gets the
+          // version with music, not the silent original.
+          const saveToHistory = (finalUrl: string) => {
+            const st = useUgcStore.getState();
+            const angle = getActiveAngle(st.brief);
+            useGenerationStore.getState().addHistory({
+              id: crypto.randomUUID(),
+              sourceUrl: st.productImageUrl || "",
+              resultUrl: finalUrl,
+              profileId: "",
+              mode: "video",
+              prompt: angle?.fullScript || "",
+              timestamp: Date.now(),
+              source: "ugc",
+              ugc: {
+                angleName: angle?.name,
+                script: angle?.fullScript,
+                ttsUrl: st.ttsUrl || undefined,
+                archetypeId: st.archetypeId || undefined,
+                keyframeUrls: st.keyframes.filter((k) => k.imageUrl).map((k) => k.imageUrl!),
+              },
+            });
+          };
+
+          if (willAddMusic) {
+            // Pass saveToHistory into addMusicToVideo — it will call it with
+            // the audio-enhanced URL on success, or the silent URL on fallback.
+            addMusicToVideo(vidUrl, saveToHistory);
+          } else {
+            // Seedance voiceover: save immediately with the native-audio URL.
+            saveToHistory(vidUrl);
           }
-          // Save to content history
-          const st = useUgcStore.getState();
-          const angle = getActiveAngle(st.brief);
-          useGenerationStore.getState().addHistory({
-            id: crypto.randomUUID(),
-            sourceUrl: st.productImageUrl || "",
-            resultUrl: vidUrl,
-            profileId: "",
-            mode: "video",
-            prompt: angle?.fullScript || "",
-            timestamp: Date.now(),
-            source: "ugc",
-            ugc: {
-              angleName: angle?.name,
-              script: angle?.fullScript,
-              ttsUrl: st.ttsUrl || undefined,
-              archetypeId: st.archetypeId || undefined,
-              keyframeUrls: st.keyframes.filter((k) => k.imageUrl).map((k) => k.imageUrl!),
-            },
-          });
           useUgcStore.getState().setStep("done");
         },
         onError: (err) => {
