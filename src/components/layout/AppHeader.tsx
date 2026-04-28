@@ -10,6 +10,7 @@ import { useT, useTMaybe, useI18nStore, LOCALE_LABELS, LOCALE_NAMES, type Locale
 import UserMenu from "@/components/UserMenu";
 import { useAuth } from "@/lib/useAuth";
 import { useThemeStore } from "@/lib/stores/theme-store";
+import ConvraLogo from "@/components/ConvraLogo";
 
 const USER_BRAND_TITLES: Record<string, string> = {
   "necksy.de@gmail.com":       "NECKSY",
@@ -87,19 +88,8 @@ export default function AppHeader() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-3">
 
         {/* ── convra. wordmark ── */}
-        <Link href="/studio" style={{ textDecoration: "none", display: "inline-flex", alignItems: "baseline", gap: 0 }}>
-          <span style={{
-            fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
-            fontWeight: 300,
-            fontSize: "1.25rem",
-            lineHeight: 1,
-            letterSpacing: "0.02em",
-            color: isDark ? "rgba(200,225,255,0.75)" : "#7c7c7c",
-            transition: "color 0.25s ease",
-          }}>
-            convra
-          </span>
-          <span style={{ color: "#d4a574", fontWeight: 300, fontSize: "1.25rem", lineHeight: 1 }}>.</span>
+        <Link href="/studio" style={{ textDecoration: "none" }}>
+          <ConvraLogo size="1.2rem" dark={isDark} linked={false} />
         </Link>
 
         {/* ── Nav ── */}

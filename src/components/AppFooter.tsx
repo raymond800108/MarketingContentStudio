@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { BUSINESS } from "@/lib/business";
 import { useThemeStore } from "@/lib/stores/theme-store";
+import ConvraLogo from "@/components/ConvraLogo";
 
 export default function AppFooter() {
   const { theme } = useThemeStore();
@@ -26,20 +27,12 @@ export default function AppFooter() {
         color: text,
       }}>
         {/* Wordmark */}
-        <a
-          href={`https://${BUSINESS.website}`}
-          target="_blank" rel="noopener noreferrer"
-          style={{ display: "inline-flex", alignItems: "baseline", gap: 8, color: text, textDecoration: "none" }}
-          onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = hover}
-          onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = text}
-        >
-          <span style={{ fontSize: 9, letterSpacing: "0.2em", textTransform: "uppercase", fontFamily: "'Outfit', system-ui, sans-serif" }}>
+        <div style={{ display: "inline-flex", alignItems: "baseline", gap: 8 }}>
+          <span style={{ fontSize: 9, letterSpacing: "0.2em", textTransform: "uppercase", fontFamily: "'Outfit', system-ui, sans-serif", color: text }}>
             Powered by
           </span>
-          <span style={{ fontFamily: "'Plus Jakarta Sans','Outfit',system-ui,sans-serif", fontWeight: 300, fontSize: 18, lineHeight: 1, letterSpacing: "0.02em", color: BUSINESS.brand.primary }}>
-            convra<span style={{ color: BUSINESS.brand.accent }}>.</span>
-          </span>
-        </a>
+          <ConvraLogo size="1.15rem" dark={isDark} />
+        </div>
 
         {/* Business meta */}
         <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2, fontSize: 10, lineHeight: 1.65, letterSpacing: "0.03em", color: text, fontFamily: "'Outfit', system-ui, sans-serif", transition: "color 0.2s ease" }}>
