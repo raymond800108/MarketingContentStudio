@@ -2160,9 +2160,9 @@ EXPLICITLY AVOID
               </div>
             </Field>
 
-            {/* Voiceover language — visible for all UGC paths (Seedance native voice
-                or Kling separate TTS). Hidden for commercial (no narration). */}
-            {isUgcFamily && (
+            {/* Voiceover language — only for Seedance UGC paths with native voice.
+                Kling is music-only (no narration), commercial has no voice at all. */}
+            {cfg.audioType === "native-voiceover" && (
               <Field label="Voiceover Language">
                 <div className="flex flex-wrap gap-2">
                   {VOICE_LANGUAGES.map((lang) => (
@@ -2668,7 +2668,11 @@ EXPLICITLY AVOID
               className="px-5 py-2 rounded-lg bg-primary text-white flex items-center gap-2 disabled:opacity-50"
             >
               <Film className="w-4 h-4" />
-              {isSeedance ? t("ugc.story.generateSeedance") : t("ugc.story.generate")}
+              {cfg.audioType === "native-voiceover"
+                ? t("ugc.story.generateSeedance")   // "Generate Lip-Synced Video"
+                : cfg.audioType === "music-only"
+                ? "Generate Video + Music"
+                : "Generate Video"}
             </button>
           </div>
         </div>
@@ -2678,7 +2682,9 @@ EXPLICITLY AVOID
       {(step === "video" || step === "done") && brief && (
         <div>
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold">{t("ugc.video.title")}</h2>
+            <h2 className="text-lg font-semibold">
+              {family === "commercial" ? "Your Commercial Video" : t("ugc.video.title")}
+            </h2>
             <button onClick={() => setStep("storyboard")} className="text-sm text-muted hover:text-foreground flex items-center gap-1">
               <ArrowLeft className="w-3.5 h-3.5" /> {t("ugc.video.back")}
             </button>
