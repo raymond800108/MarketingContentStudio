@@ -20,9 +20,9 @@ export default function AppFooter() {
       className="app-footer"
     >
       <style>{`
-        [data-theme="dark"]  .app-footer { --footer-divider: rgba(255,255,255,0.06); --footer-text: rgba(180,210,230,0.30); --footer-hover: rgba(180,210,230,0.65); --footer-dot-sep: rgba(180,210,230,0.18); }
-        [data-theme="light"] .app-footer { --footer-divider: rgba(120,80,40,0.15);  --footer-text: rgba(60,40,20,0.55);    --footer-hover: rgba(60,40,20,0.82);   --footer-dot-sep: rgba(120,80,40,0.28); }
-        :root .app-footer                { --footer-divider: rgba(255,255,255,0.06); --footer-text: rgba(180,210,230,0.30); --footer-hover: rgba(180,210,230,0.65); --footer-dot-sep: rgba(180,210,230,0.18); }
+        [data-theme="dark"]  .app-footer { --footer-divider: rgba(255,255,255,0.06); --footer-text: rgba(180,210,230,0.32); --footer-hover: rgba(180,210,230,0.65); --footer-dot-sep: rgba(180,210,230,0.2);  }
+        [data-theme="light"] .app-footer { --footer-divider: rgba(80,50,20,0.18);   --footer-text: rgba(50,30,10,0.72);    --footer-hover: rgba(50,30,10,0.92);   --footer-dot-sep: rgba(80,50,20,0.35);  }
+        :root .app-footer                { --footer-divider: rgba(255,255,255,0.06); --footer-text: rgba(180,210,230,0.32); --footer-hover: rgba(180,210,230,0.65); --footer-dot-sep: rgba(180,210,230,0.2);  }
         .app-footer a, .app-footer span  { transition: color 0.18s ease; }
         .app-footer a:hover              { color: var(--footer-hover) !important; }
       `}</style>

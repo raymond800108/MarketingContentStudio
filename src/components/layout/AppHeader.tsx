@@ -232,9 +232,9 @@ export default function AppHeader() {
                 display: "flex", alignItems: "center", gap: 5,
                 padding: "5px 10px",
                 borderRadius: 7,
-                border: "1px solid rgba(6,182,212,0.15)",
-                background: "rgba(6,18,32,0.6)",
-                color: "rgba(100,160,200,0.8)",
+                border: isDark ? "1px solid rgba(6,182,212,0.15)" : "1px solid rgba(234,100,30,0.18)",
+                background: isDark ? "rgba(6,18,32,0.6)" : "rgba(255,250,245,0.9)",
+                color: isDark ? "rgba(100,160,200,0.8)" : "rgba(80,45,15,0.75)",
                 fontSize: "0.75rem",
                 fontFamily: "'Space Mono', monospace",
                 cursor: "pointer",
@@ -252,10 +252,12 @@ export default function AppHeader() {
                   position: "absolute",
                   right: 0, top: "calc(100% + 8px)",
                   width: 160,
-                  background: "rgba(7, 18, 32, 0.97)",
-                  border: "1px solid rgba(6,182,212,0.18)",
+                  background: isDark ? "rgba(7,18,32,0.97)" : "rgba(255,252,248,0.98)",
+                  border: isDark ? "1px solid rgba(6,182,212,0.18)" : "1px solid rgba(234,100,30,0.18)",
                   borderRadius: 10,
-                  boxShadow: "0 16px 48px rgba(0,0,0,0.6), 0 0 20px rgba(6,182,212,0.08)",
+                  boxShadow: isDark
+                    ? "0 16px 48px rgba(0,0,0,0.6), 0 0 20px rgba(6,182,212,0.08)"
+                    : "0 8px 32px rgba(28,19,9,0.12), 0 2px 8px rgba(28,19,9,0.06)",
                   zIndex: 50,
                   padding: "4px",
                   backdropFilter: "blur(20px)",
@@ -271,18 +273,26 @@ export default function AppHeader() {
                         justifyContent: "space-between",
                         padding: "8px 12px",
                         fontSize: "0.8rem",
-                        fontFamily: "'Syne', sans-serif",
+                        fontFamily: isDark ? "'Syne', sans-serif" : "'Plus Jakarta Sans', sans-serif",
                         textAlign: "left",
                         cursor: "pointer",
                         borderRadius: 7,
                         border: "none",
-                        background: loc === locale ? "rgba(6,182,212,0.1)" : "transparent",
-                        color: loc === locale ? "#06b6d4" : "rgba(200,230,255,0.7)",
+                        background: loc === locale
+                          ? isDark ? "rgba(6,182,212,0.1)" : "rgba(234,100,30,0.08)"
+                          : "transparent",
+                        color: loc === locale
+                          ? isDark ? "#06b6d4" : "#ea6420"
+                          : isDark ? "rgba(200,230,255,0.7)" : "rgba(60,35,10,0.7)",
                         transition: "all 0.15s ease",
                       }}
                     >
                       <span>{LOCALE_NAMES[loc]}</span>
-                      <span style={{ fontSize: "0.7rem", color: "rgba(100,160,200,0.6)", fontFamily: "'Space Mono', monospace" }}>{LOCALE_LABELS[loc]}</span>
+                      <span style={{
+                        fontSize: "0.7rem",
+                        color: isDark ? "rgba(100,160,200,0.6)" : "rgba(120,80,30,0.5)",
+                        fontFamily: "'Space Mono', monospace",
+                      }}>{LOCALE_LABELS[loc]}</span>
                     </button>
                   ))}
                 </div>
@@ -298,11 +308,11 @@ export default function AppHeader() {
                 display: "flex", alignItems: "center", gap: 6,
                 padding: "5px 10px",
                 borderRadius: 7,
-                border: "1px solid rgba(6,182,212,0.15)",
-                background: "rgba(6,18,32,0.6)",
-                color: "rgba(200,230,255,0.8)",
+                border: isDark ? "1px solid rgba(6,182,212,0.15)" : "1px solid rgba(234,100,30,0.18)",
+                background: isDark ? "rgba(6,18,32,0.6)" : "rgba(255,250,245,0.9)",
+                color: isDark ? "rgba(200,230,255,0.8)" : "rgba(60,35,10,0.75)",
                 fontSize: "0.8rem",
-                fontFamily: "'Syne', sans-serif",
+                fontFamily: isDark ? "'Syne', sans-serif" : "'Plus Jakarta Sans', sans-serif",
                 cursor: "pointer",
                 transition: "all 0.18s ease",
               }}
@@ -315,9 +325,9 @@ export default function AppHeader() {
                   </span>
                 </>
               ) : (
-                <span style={{ color: "rgba(100,160,200,0.5)" }}>{t("nav.noProfile")}</span>
+                <span style={{ color: isDark ? "rgba(100,160,200,0.5)" : "rgba(120,80,30,0.5)" }}>{t("nav.noProfile")}</span>
               )}
-              <ChevronDown style={{ width: 13, height: 13, color: "rgba(100,160,200,0.5)" }} />
+              <ChevronDown style={{ width: 13, height: 13, color: isDark ? "rgba(100,160,200,0.5)" : "rgba(120,80,30,0.45)" }} />
             </button>
 
             {profileOpen && (
@@ -327,10 +337,12 @@ export default function AppHeader() {
                   position: "absolute",
                   right: 0, top: "calc(100% + 8px)",
                   width: 220,
-                  background: "rgba(7, 18, 32, 0.97)",
-                  border: "1px solid rgba(6,182,212,0.18)",
+                  background: isDark ? "rgba(7,18,32,0.97)" : "rgba(255,252,248,0.98)",
+                  border: isDark ? "1px solid rgba(6,182,212,0.18)" : "1px solid rgba(234,100,30,0.18)",
                   borderRadius: 10,
-                  boxShadow: "0 16px 48px rgba(0,0,0,0.6), 0 0 20px rgba(6,182,212,0.08)",
+                  boxShadow: isDark
+                    ? "0 16px 48px rgba(0,0,0,0.6), 0 0 20px rgba(6,182,212,0.08)"
+                    : "0 8px 32px rgba(28,19,9,0.12), 0 2px 8px rgba(28,19,9,0.06)",
                   zIndex: 50,
                   padding: "4px",
                   backdropFilter: "blur(20px)",
@@ -347,24 +359,28 @@ export default function AppHeader() {
                         cursor: "pointer",
                         borderRadius: 7,
                         border: "none",
-                        background: p.id === activeProfileId ? "rgba(6,182,212,0.1)" : "transparent",
+                        background: p.id === activeProfileId
+                          ? isDark ? "rgba(6,182,212,0.1)" : "rgba(234,100,30,0.08)"
+                          : "transparent",
                         transition: "all 0.15s ease",
                       }}
                     >
                       <span style={{ fontSize: "1.1rem", flexShrink: 0 }}>{p.icon}</span>
                       <div style={{ minWidth: 0 }}>
                         <div style={{
-                          fontFamily: "'Syne', sans-serif",
+                          fontFamily: isDark ? "'Syne', sans-serif" : "'Plus Jakarta Sans', sans-serif",
                           fontWeight: p.id === activeProfileId ? 600 : 400,
                           fontSize: "0.82rem",
-                          color: p.id === activeProfileId ? "#06b6d4" : "rgba(200,230,255,0.85)",
+                          color: p.id === activeProfileId
+                            ? isDark ? "#06b6d4" : "#ea6420"
+                            : isDark ? "rgba(200,230,255,0.85)" : "rgba(40,20,5,0.8)",
                           overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                         }}>
                           {tM(`profile.${p.id}`, p.name)}
                         </div>
                         <div style={{
                           fontSize: "0.7rem",
-                          color: "rgba(100,160,200,0.5)",
+                          color: isDark ? "rgba(100,160,200,0.5)" : "rgba(100,65,20,0.55)",
                           fontFamily: "'Space Mono', monospace",
                           overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                         }}>
@@ -373,7 +389,7 @@ export default function AppHeader() {
                       </div>
                     </button>
                   ))}
-                  <div style={{ borderTop: "1px solid rgba(6,182,212,0.1)", marginTop: 4, paddingTop: 4 }}>
+                  <div style={{ borderTop: isDark ? "1px solid rgba(6,182,212,0.1)" : "1px solid rgba(234,100,30,0.1)", marginTop: 4, paddingTop: 4 }}>
                     <Link
                       href="/onboarding"
                       onClick={() => setProfileOpen(false)}
@@ -381,8 +397,8 @@ export default function AppHeader() {
                         display: "block",
                         padding: "8px 12px",
                         fontSize: "0.8rem",
-                        fontFamily: "'Syne', sans-serif",
-                        color: "rgba(100,160,200,0.6)",
+                        fontFamily: isDark ? "'Syne', sans-serif" : "'Plus Jakarta Sans', sans-serif",
+                        color: isDark ? "rgba(100,160,200,0.6)" : "rgba(100,65,20,0.6)",
                         textDecoration: "none",
                         borderRadius: 7,
                         transition: "all 0.15s ease",
