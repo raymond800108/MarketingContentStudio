@@ -324,6 +324,34 @@ function LandingPage() {
           )}
         </p>
 
+        {/* ── convra. logo + model strip — sits between headline and inputs ── */}
+        <div style={{ textAlign: "center", margin: "2rem 0 0" }}>
+          <a href="https://convra.net" target="_blank" rel="noopener noreferrer"
+            style={{ textDecoration: "none", display: "inline-flex", alignItems: "baseline", gap: 2 }}>
+            <span style={{
+              fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
+              fontWeight: 300, fontSize: "2rem", lineHeight: 1, letterSpacing: "0.04em",
+              color: isDark ? "rgba(220,235,255,0.75)" : "#7c7c7c",
+            }}>convra</span>
+            <span style={{ color: "#d4a574", fontWeight: 300, fontSize: "2rem", lineHeight: 1 }}>.</span>
+          </a>
+          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "center", gap: "6px 10px", marginTop: "0.5rem" }}>
+            <span style={{ fontSize: "0.6rem", letterSpacing: "0.18em", textTransform: "uppercase", color: isDark ? "rgba(180,210,230,0.38)" : "rgba(80,50,20,0.4)", fontFamily: "'Space Mono', monospace" }}>
+              {tM("landing.powered.label", "Powered by")}
+            </span>
+            {[
+              { name: "GPT Image 2",  color: isDark ? "#06b6d4" : "#0891b2" },
+              { name: "Seedance 2.0", color: isDark ? "#a78bfa" : "#7c3aed" },
+              { name: "Kling 3.0",    color: isDark ? "#34d399" : "#059669" },
+            ].map((m, i) => (
+              <span key={m.name} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                {i > 0 && <span style={{ color: isDark ? "rgba(180,210,230,0.18)" : "rgba(80,50,20,0.18)", fontSize: "0.6rem" }}>·</span>}
+                <span style={{ fontSize: "0.68rem", fontFamily: "'Space Mono', monospace", fontWeight: 700, letterSpacing: "0.06em", color: m.color }}>{m.name}</span>
+              </span>
+            ))}
+          </div>
+        </div>
+
         {/* Input-as-hero panel */}
         <div className="mt-8 sm:mt-12 grid grid-cols-1 lg:grid-cols-5 gap-4 max-w-5xl mx-auto">
           {/* Left: drop zone */}
