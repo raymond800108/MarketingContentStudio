@@ -428,7 +428,17 @@ export default function UgcStudioPage() {
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || t("ugc.err.briefFailed"));
+      if (!res.ok) {
+        // Expired product image — clear the stale URL and send user back to
+        // re-upload so they aren't stuck with a useless error banner.
+        if (data.error === "PRODUCT_IMAGE_EXPIRED") {
+          setProductImageUrl(null);
+          setStep("product");
+          setGenError("Your product image link expired. Please re-upload your photo.");
+          return;
+        }
+        throw new Error(data.error || t("ugc.err.briefFailed"));
+      }
       setBrief(data.brief);
       // UGC v2 = UGC family + Seedance. Uses Seedance's keyframe-anchored
       // mode (first_frame_url + last_frame_url), 2 or 4 frames depending

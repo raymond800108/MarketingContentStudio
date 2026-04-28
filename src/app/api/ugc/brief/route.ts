@@ -1702,6 +1702,15 @@ CRITICAL: ALL text fields in the JSON — angles, scripts, keyframePrompts, AND 
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     console.error("[ugc-brief] Error:", message);
+    // OpenAI returns "400 Error while downloading <url>" when the product image
+    // URL has expired (FAL CDN URLs have a TTL). Surface a user-friendly message
+    // so the UI can prompt the user to re-upload.
+    if (/400 Error while downloading|unable to download|could not download/i.test(message)) {
+      return NextResponse.json(
+        { error: "PRODUCT_IMAGE_EXPIRED", message: "Your product image link has expired. Please re-upload your product photo." },
+        { status: 422 }
+      );
+    }
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
