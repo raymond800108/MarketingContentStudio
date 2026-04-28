@@ -21,7 +21,7 @@ export default function AppFooter() {
     >
       <style>{`
         [data-theme="dark"]  .app-footer { --footer-divider: rgba(255,255,255,0.06); --footer-text: rgba(180,210,230,0.32); --footer-hover: rgba(180,210,230,0.65); --footer-dot-sep: rgba(180,210,230,0.2);  }
-        [data-theme="light"] .app-footer { --footer-divider: rgba(80,50,20,0.18);   --footer-text: rgba(50,30,10,0.72);    --footer-hover: rgba(50,30,10,0.92);   --footer-dot-sep: rgba(80,50,20,0.35);  }
+        [data-theme="light"] .app-footer { --footer-divider: rgba(80,50,20,0.2);    --footer-text: #3a2010;                --footer-hover: #1a0a00;               --footer-dot-sep: rgba(80,50,20,0.45); }
         :root .app-footer                { --footer-divider: rgba(255,255,255,0.06); --footer-text: rgba(180,210,230,0.32); --footer-hover: rgba(180,210,230,0.65); --footer-dot-sep: rgba(180,210,230,0.2);  }
         .app-footer a, .app-footer span  { transition: color 0.18s ease; }
         .app-footer a:hover              { color: var(--footer-hover) !important; }
