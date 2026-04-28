@@ -3,6 +3,7 @@ import { Outfit, Syne, Space_Mono, Orbitron, Plus_Jakarta_Sans, JetBrains_Mono }
 import "./globals.css";
 import AuthProvider from "@/components/AuthProvider";
 import SchedulerProvider from "@/components/SchedulerProvider";
+import AppFooter from "@/components/AppFooter";
 
 // ── Dark theme fonts ──
 const outfit    = Outfit({ subsets: ["latin"], variable: "--font-outfit",   display: "swap" });
@@ -46,7 +47,10 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       </head>
       <body className="min-h-full flex flex-col font-sans">
         <AuthProvider>
-          <SchedulerProvider>{children}</SchedulerProvider>
+          <SchedulerProvider>
+            <div className="flex-1 flex flex-col">{children}</div>
+            <AppFooter />
+          </SchedulerProvider>
         </AuthProvider>
       </body>
     </html>
