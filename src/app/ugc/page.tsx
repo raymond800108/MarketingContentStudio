@@ -76,7 +76,7 @@ const PLATFORM_RATIOS: Record<string, string> = {
   "ig-post": "1:1",
 };
 
-const MAX_POLL_MS = 5 * 60 * 1000;
+const MAX_POLL_MS = 10 * 60 * 1000; // 10 min — multi-ref image-to-image can be slow
 
 export default function UgcStudioPage() {
   const {
@@ -897,15 +897,17 @@ EXPLICITLY AVOID
           // back-off. On the final retry (retryCount >= 2) drop image refs
           // and fall back to text-only — bypasses any image-URL accessibility
           // issue on Kie's side while still producing a usable keyframe.
+          // "timeout" = poll budget exceeded; also retryable, drop refs on last try
           const isRetryable =
             !!originalPrompt &&
             retryCount < 3 &&
-            /code\s*500|Internal Error|timed out|fetch failed/i.test(err);
+            /code\s*500|Internal Error|timed out|timeout|fetch failed/i.test(err);
           if (isRetryable) {
             const delayMs = Math.min(2000 * Math.pow(2, retryCount), 12000);
-            const fallbackInputs = retryCount >= 2 ? [] : originalInputs;
+            // On timeout, drop image refs — the model is struggling with them
+            const fallbackInputs = (retryCount >= 1 || /timeout/i.test(err)) ? [] : originalInputs;
             console.warn(
-              `[ugc] Keyframe ${index} 500 — retry ${retryCount + 1}/3 in ${delayMs}ms` +
+              `[ugc] Keyframe ${index} error — retry ${retryCount + 1}/3 in ${delayMs}ms` +
               (fallbackInputs?.length === 0 ? " (text-only fallback)" : ""),
               err
             );
@@ -920,6 +922,18 @@ EXPLICITLY AVOID
             return;
           }
           useUgcStore.getState().patchKeyframe(index, { status: "error", error: err });
+
+          // Even on failure, keep the identity chain alive for subsequent frames.
+          // Use product-only inputs (no face ref) so the next frame can at least generate.
+          const st2 = useUgcStore.getState();
+          if (st2.family === "ugc" && index < st2.keyframes.length - 1) {
+            const next = st2.keyframes[index + 1];
+            if (next && next.status === "idle" && originalPrompt) {
+              const fallback = [st2.productImageUrl || ""].filter(Boolean);
+              console.warn(`[ugc] Frame ${index} failed — still chaining to frame ${index + 1} with product-only refs`);
+              setTimeout(() => generateKeyframe(next.index, next.prompt, fallback), 2000);
+            }
+          }
         },
       },
     });
